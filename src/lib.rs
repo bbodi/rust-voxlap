@@ -19,12 +19,21 @@ pub struct dpoint3d {
 }
 
 impl dpoint3d {
-    fn new(x: f64, y: f64, z: f64) -> dpoint3d {
+    pub fn new(x: f64, y: f64, z: f64) -> dpoint3d {
         dpoint3d {
             x: x,
             y: y,
             z: z,
         }
+    }
+
+    pub fn to_point3d(&self) -> point3d {
+        point3d::new(self.x as f32, self.y as f32, self.z as f32)
+    }
+
+    
+    pub fn to_lpoint3d(&self) -> lpoint3d {
+        lpoint3d::new(self.x as i32, self.y as i32, self.z as i32)
     }
 }
 
@@ -37,8 +46,26 @@ pub struct point3d {
 }
 
 impl point3d {
-    fn new(x: f32, y: f32, z: f32) -> point3d {
+    pub fn new(x: f32, y: f32, z: f32) -> point3d {
         point3d {
+            x: x,
+            y: y,
+            z: z,
+        }
+    }
+}
+
+#[deriving(PartialEq, Clone, Show)]
+#[repr(C)]
+pub struct lpoint3d {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl lpoint3d {
+    pub fn new(x: i32, y: i32, z: i32) -> lpoint3d {
+        lpoint3d {
             x: x,
             y: y,
             z: z,
@@ -57,64 +84,6 @@ pub struct Orientation {
 impl Orientation {
 
 }
-/*
-#[repr(C)]
-struct vx5 {
-    //------------------------ DATA coming from VOXLAP5 ------------------------
-
-        //Clipmove hit point info (use this after calling clipmove):
-    clipmaxcr: c_double; //clipmove always calls findmaxcr even with no movement
-    cliphit[3]: dpoint3d;
-    cliphitnum: c_long;
-
-        //Bounding box written by last set* VXL writing call
-    minx: c_long;
-    miny: c_long;
-    minz: c_long;
-    maxx: c_long;
-    maxy: c_long;
-    maxz: c_long;
-
-        //Falling voxels shared data:
-    flstnum: c_long;
-    flstboxtype flstcnt[FLPIECES];
-
-        //Total count of solid voxels in .VXL map (included unexposed voxels)
-    globalmass: c_long;
-
-        //Temp workspace for KFA animation (hinge angles)
-        //Animsprite writes these values&you may modify them before drawsprite
-    kfaval: c_short[MAXFRM];
-
-    //------------------------ DATA provided to VOXLAP5 ------------------------
-
-        //Opticast variables:
-    long anginc, sideshademode, mipscandist, maxscandist, vxlmipuse, fogcol;
-
-        //Drawsprite variables:
-    long kv6mipfactor, kv6col;
-        //Drawsprite x-plane clipping (reset to 0,(high int) after use!)
-        //For example min=8,max=12 permits only planes 8,9,10,11 to draw
-    long xplanemin, xplanemax;
-
-        //Map modification function data:
-    long curcol, currad, curhei;
-    float curpow;
-
-        //Procedural texture function data:
-    long (*colfunc)(lpoint3d *);
-    long cen, amount, *pic, bpl, xsiz, ysiz, xoru, xorv, picmode;
-    point3d fpico, fpicu, fpicv, fpicw;
-    lpoint3d pico, picu, picv;
-    float daf;
-
-        //Lighting variables: (used by updatelighting)
-    long lightmode; //0 (default), 1:simple lighting, 2:lightsrc lighting
-    lightsrctype lightsrc[MAXLIGHTS]; //(?,?,?),128*128,262144
-    long numlights;
-
-    long fallcheck;
-} vx5;*/
 
 pub mod ll {
     use libc::{c_long, c_int, c_char, c_float, c_double};
@@ -138,6 +107,10 @@ pub mod ll {
         pub fn clipmove(p: *const ::dpoint3d, v: *const ::dpoint3d, acr: c_double);
 
         pub fn axisrotate(p: *mut ::point3d, axis: *const ::point3d, w: c_float);
+
+        pub fn setcube(px: c_float, px: c_float, px: c_float, col: c_long);
+        pub fn setsphere(center: &::lpoint3d, hitrad: c_long, dacol: c_long);
+        pub fn setnormflash(px: c_float, px: c_float, px: c_float, flash_radius: c_long, intens: c_long);
 
 
         // custom
@@ -193,7 +166,6 @@ pub fn print6x8(x: i32, y: i32, fg_color: Color, bg_color: Color, text: &str) {
     let c_str = text.to_c_str();
     let ptr = c_str.as_ptr();
     unsafe {
-        println!("fg: 0x{:X}", fg_color.to_u32());
         ll::print6x8(x, y, fg_color.to_u32(), bg_color.to_u32(), ptr);
     }   
 }
@@ -251,6 +223,17 @@ pub fn axis_rotate(pos: &mut point3d, axis: &point3d, w: f32) {
     }
 }
 
+pub fn axis_rotate_d(dpos: &mut dpoint3d, axis: &dpoint3d, w: f32) {
+    let mut fpos = point3d::new(dpos.x as f32, dpos.y as f32, dpos.z as f32);
+    let mut faxis = point3d::new(axis.x as f32, axis.y as f32, axis.z as f32);
+    unsafe {
+        ll::axisrotate(&mut fpos, &faxis, w);
+    }
+    dpos.x = fpos.x as f64;
+    dpos.y = fpos.y as f64;
+    dpos.z = fpos.z as f64;
+}
+
 pub fn z_rotate(pos: &mut point3d, w: f32) {
     let axis = point3d::new(0.0, 0.0, 1.0);
     unsafe {
@@ -260,7 +243,7 @@ pub fn z_rotate(pos: &mut point3d, w: f32) {
 
 pub fn z_rotate_d(dpos: &mut dpoint3d, w: f32) {
     let axis = point3d::new(0.0, 0.0, 1.0);
-    let mut fpos = point3d::new(dpos.x as f32, dpos.y as f32, dpos.z as f32, );
+    let mut fpos = point3d::new(dpos.x as f32, dpos.y as f32, dpos.z as f32);
     unsafe {
         ll::axisrotate(&mut fpos, &axis, w);
     }
@@ -273,5 +256,23 @@ pub fn set_max_scan_dist_to_max() {
     unsafe {
         let maxscandist = (2048f64 * 1.41421356237f64) as i32;
         ll::set_max_scan_dist_to_max(maxscandist);
+    }
+}
+
+pub fn set_norm_flash(pos: &point3d, flash_radius: i32, intens: i32) {
+    unsafe {
+        ll::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
+    }
+}
+
+pub fn set_cube(pos: &point3d, col: Color) {
+    unsafe {
+        ll::setcube(pos.x, pos.y, pos.z, 0x80FFFFFF);//col.to_u32()
+    }
+}
+
+pub fn set_sphere(pos: &lpoint3d, radius: i32, dacol: i32) {
+    unsafe {
+        ll::setsphere(pos, radius, dacol);
     }
 }
