@@ -16,7 +16,6 @@ mod c_api;
 
 
 #[deriving(PartialEq, Clone, Show)]
-#[repr(C)]
 pub struct vec3 {
     pub x: f32,
     pub y: f32,
@@ -72,24 +71,20 @@ impl VxSprite {
         let mut spr = c_api::vx5sprite::new();
         let c_str = filename.to_c_str();
         let filename_ptr = c_str.as_ptr();
+        println!("flags before: {}", spr.flags);
         unsafe {
             c_api::getspr(&mut spr, filename_ptr);
         }
+        println!("flags after: {}", spr.flags);
         VxSprite{ptr: spr}
     }
 
     pub fn set_pos(&mut self, pos: &vec3) {
         unsafe {
-            //let mut vx_ref = &mut self.ptr;
             self.ptr.pos = pos.as_point3d();
         }
     }
 
-    pub fn draw(&self) {
-        unsafe {
-            c_api::drawsprite(&self.ptr);
-        }
-    }
 }
 
 // The `Add<T, U>` trait needs two generic parameters:
@@ -290,7 +285,7 @@ pub fn set_norm_flash(pos: &vec3, flash_radius: i32, intens: i32) {
 
 pub fn set_cube(pos: &vec3, col: Color) {
     unsafe {
-        c_api::setcube(pos.x as i32, pos.y as i32, pos.z as i32,  col.to_u32());
+        c_api::setcube(pos.x as i32, pos.y as i32, pos.z as i32, col.to_u32());
     }
 }
 
@@ -309,5 +304,11 @@ pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
 pub fn draw_point_3d(pos: &vec3, col: Color) {
     unsafe {
         c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_u32());
+    }
+}
+
+pub fn draw_sprite(spr: &VxSprite) {
+    unsafe {
+        c_api::drawsprite(&spr.ptr);
     }
 }
