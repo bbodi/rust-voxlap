@@ -10,6 +10,7 @@ extern crate libc;
 use std::c_str::CString;
 use std::c_vec::CVec;
 use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
+use std::ptr;
 
 mod c_api;
 
@@ -31,16 +32,16 @@ impl vec3 {
         }
     }
 
-    fn to_point3d(&self) -> c_api::point3d {
+    fn as_point3d(&self) -> c_api::point3d {
         c_api::point3d {x: self.x as f32, y: self.y as f32, z: self.z as f32}
     }
 
     
-    fn to_lpoint3d(&self) -> c_api::lpoint3d {
+    fn as_lpoint3d(&self) -> c_api::lpoint3d {
         c_api::lpoint3d {x: self.x as i32, y: self.y as i32, z: self.z as i32}
     }
 
-    fn to_dpoint3d(&self) -> c_api::dpoint3d {
+    fn as_dpoint3d(&self) -> c_api::dpoint3d {
         c_api::dpoint3d {x: self.x as f64, y: self.y as f64, z: self.z as f64}
     }
 
@@ -58,6 +59,36 @@ impl vec3 {
         self.x = pos.x as f32;
         self.y = pos.y as f32;
         self.z = pos.z as f32;
+    }
+}
+
+pub struct VxSprite {
+    ptr: c_api::vx5sprite,
+}
+
+impl VxSprite {
+
+    pub fn new(filename: &str) -> VxSprite {
+        let mut spr = c_api::vx5sprite::new();
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        unsafe {
+            c_api::getspr(&mut spr, filename_ptr);
+        }
+        VxSprite{ptr: spr}
+    }
+
+    pub fn set_pos(&mut self, pos: &vec3) {
+        unsafe {
+            //let mut vx_ref = &mut self.ptr;
+            self.ptr.pos = pos.as_point3d();
+        }
+    }
+
+    pub fn draw(&self) {
+        unsafe {
+            c_api::drawsprite(&self.ptr);
+        }
     }
 }
 
@@ -160,6 +191,20 @@ pub fn load_default_map() -> Orientation {
     }
 }
 
+/*pub fn load_kv6(filename: &str) -> Result<VxSprite, i32> {
+    unsafe {
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        let ptr = c_api::getkv6(filename_ptr);
+        println!("ptr: {}", ptr);
+        if ptr.is_null() {
+            Err(0)
+        } else {
+            Ok(VxSprite{ptr: ptr})
+        }
+    }
+}*/
+
 pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
     unsafe {
         let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
@@ -167,8 +212,8 @@ pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
         let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let c_str = filename.to_c_str();
-        let ptr = c_str.as_ptr();
-        let result = c_api::loadvxl(ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo);        
+        let filename_ptr = c_str.as_ptr();
+        let result = c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo);        
         match result {
             1 => Ok(Orientation {
                     pos: vec3::from_dpoint3d(ipo),
@@ -190,10 +235,10 @@ pub fn update_vxl() {
 
 pub fn set_camera(ori: &Orientation, center_x: f32, center_y: f32, focal_length: f32) {
     unsafe {
-        c_api::setcamera(&ori.pos.to_dpoint3d(), 
-            &ori.right_vec.to_dpoint3d(), 
-            &ori.down_vec.to_dpoint3d(), 
-            &ori.forward_vec.to_dpoint3d(), 
+        c_api::setcamera(&ori.pos.as_dpoint3d(), 
+            &ori.right_vec.as_dpoint3d(), 
+            &ori.down_vec.as_dpoint3d(), 
+            &ori.forward_vec.as_dpoint3d(), 
             center_x, center_y, focal_length);
     }
 }
@@ -206,16 +251,16 @@ pub fn opticast() {
 
 pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
     unsafe {
-        let mut dpoint3d = pos.to_dpoint3d();
-        c_api::clipmove(&mut dpoint3d, &move_vec.to_dpoint3d(), acr);
+        let mut dpoint3d = pos.as_dpoint3d();
+        c_api::clipmove(&mut dpoint3d, &move_vec.as_dpoint3d(), acr);
         pos.fill_from_dpoint3d(dpoint3d);
     }   
 }
 
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
     unsafe {
-        let mut point3d = pos.to_point3d();
-        c_api::axisrotate(&mut point3d, &axis.to_point3d(), w);
+        let mut point3d = pos.as_point3d();
+        c_api::axisrotate(&mut point3d, &axis.as_point3d(), w);
         pos.fill_from_point3d(point3d);
     }
 }
@@ -223,7 +268,7 @@ pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
 pub fn z_rotate(pos: &mut vec3, w: f32) {
     unsafe {
         let axis = c_api::point3d{ x: 0.0, y: 0.0, z: 1.0 };
-        let mut point3d = pos.to_point3d();
+        let mut point3d = pos.as_point3d();
         c_api::axisrotate(&mut point3d, &axis, w);
         pos.fill_from_point3d(point3d);
     }
@@ -251,7 +296,7 @@ pub fn set_cube(pos: &vec3, col: Color) {
 
 pub fn set_sphere(pos: &vec3, radius: i32, dacol: i32) {
     unsafe {
-        c_api::setsphere(&pos.to_lpoint3d(), radius, dacol);
+        c_api::setsphere(&pos.as_lpoint3d(), radius, dacol);
     }
 }
 

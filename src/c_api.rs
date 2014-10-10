@@ -1,4 +1,5 @@
-    use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
+    use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort, c_ulong};
+    use std::ptr;
 
     #[repr(C)]
     pub struct lpoint3d {
@@ -29,23 +30,52 @@
         pub z: c_double,
     }
 
-    #[repr(C)]
-    pub struct kv6data;
+#[repr(C)]
+pub struct kv6data {
+    leng: c_long, 
+    xsiz: c_long, 
+    ysiz: c_long, 
+    zsiz: c_long,
+    xpiv: c_float, 
+    ypiv: c_float, 
+    zpiv: c_float,
+    numvoxs: c_ulong,
+    namoff: c_long,
+    lowermip: *const kv6data,
+    vox: *const kv6voxtype,      //numvoxs*sizeof(kv6voxtype)
+    xlen: *const c_ulong,  //xsiz*sizeof(long)
+    ylen: *const c_ushort, //xsiz*ysiz*sizeof(short)
+}
 
     #[repr(C)]
     pub struct vx5sprite {
-        pos: point3d, /// position in VXL coordinates
-        flags: c_long, /// flags bit 0:0=use normal shading, 1=disable normal shading
+        pub pos: point3d, /// position in VXL coordinates
+        pub flags: c_long, /// flags bit 0:0=use normal shading, 1=disable normal shading
                               /// flags bit 1:0=points to kv6data, 1=points to kfatype
                               /// flags bit 2:0=normal, 1=invisible sprite
-        s: point3d, /// kv6data.xsiz direction in VXL coordinates
+        pub s: point3d, /// kv6data.xsiz direction in VXL coordinates
 
-        voxnum: *const kv6data, /// pointer to KV6 voxel data (bit 1 of flags = 0) or to KFA animation  (bit 1 of flags = 1)
-        h: point3d,          /// kv6data.ysiz direction in VXL coordinates
-        kfatim: c_long,        /// time (in milliseconds) of KFA animation
-        f: point3d,          /// kv6data.zsiz direction in VXL coordinates
+        pub voxnum: *mut kv6data, /// pointer to KV6 voxel data (bit 1 of flags = 0) or to KFA animation  (bit 1 of flags = 1)
+        pub h: point3d,          /// kv6data.ysiz direction in VXL coordinates
+        pub kfatim: c_long,        /// time (in milliseconds) of KFA animation
+        pub f: point3d,          /// kv6data.zsiz direction in VXL coordinates
         /// make vx5sprite exactly 64 bytes :) ASSERT THAT IT IS 64 byte long!
-        okfatim: c_long       
+        pub okfatim: c_long
+    }
+
+    impl vx5sprite {
+        pub fn new() -> vx5sprite {
+            vx5sprite {
+                pos: point3d{x: 0f32, y: 0f32, z: 0f32},
+                flags: 0,
+                s: point3d{x: 0f32, y: 0f32, z: 0f32},
+                voxnum: ptr::null_mut(),
+                h: point3d{x: 0f32, y: 0f32, z: 0f32},
+                kfatim: 0,
+                f: point3d{x: 0f32, y: 0f32, z: 0f32},
+                okfatim: 0,
+            }
+        }
     }
 
     #[repr(C)]
@@ -88,7 +118,7 @@
         pub numfrm: c_long,
         pub seqnum: c_long,
         pub namoff: c_long,
-        basekv6: *const kv6data,
+        basekv6: *const kv6data,    // kv6data
         spr: *const vx5sprite,      //[numspr]
         hinge: *const hingetype,    //[numhin]
         hingesort: *const c_long,   //[numhin]
@@ -208,7 +238,7 @@
         /// kv6nam: .KV6 filename
         /// returns: pointer to malloc'ed kv6data structure. Do NOT free this buffer
         ///         yourself! Returns 0 if there's an error - such as bad filename.
-        pub fn getkv6 (kv6nam: *const c_char) -> *mut kv6data;
+        pub fn getkv6 (kv6nam: *const c_char) -> *mut vx5sprite;
 
         /// Loads a .KFA file and its associated .KV6 voxel sprite into memory. Works
         ///   just like getkv6() for for .KFA files.
@@ -239,7 +269,7 @@
         ///    spr: Pointer to sprite structure that you provide. getspr() writes:
         ///            only to the kv6data/voxtype, kfatim, and flags members.
         /// filnam: filename of either a .KV6 or .KFA file.
-        pub fn getspr (spr: &vx5sprite, filnam: *const c_char);
+        pub fn getspr (spr: &mut vx5sprite, filnam: *const c_char);
 
         /// Generate 1 more mip-level for a .KV6 sprite. This function generates a
         ///   lower MIP level only if kv6->lowermip is NULL, and kv6->xsiz,
@@ -270,7 +300,7 @@
         /// Draw a .KV6/.KFA voxel sprite to the screen. Position & orientation are
         ///  specified in the vx5sprite structure. See VOXLAP5.H for details on the
         ///  structure.
-        pub fn drawsprite (spr: &vx5sprite);
+        pub fn drawsprite (spr: *const vx5sprite);
 
         /// This converts a spherical cut-out of the VXL map into a .KV6 sprite in
         ///   memory. This function can be used to make walls fall over (with full
