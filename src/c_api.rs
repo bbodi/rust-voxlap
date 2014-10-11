@@ -1,123 +1,123 @@
-    use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort, c_ulong};
-    use std::ptr;
+use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort, c_ulong};
+use std::ptr;
 
-    #[repr(C)]
-    pub struct lpoint3d {
-        pub x: c_long,
-        pub y: c_long,
-        pub z: c_long,
-    }
+#[repr(C)]
+pub struct lpoint3d {
+    pub x: c_long,
+    pub y: c_long,
+    pub z: c_long,
+}
 
-    #[repr(C)]
-    pub struct point3d {
-        pub x: c_float,
-        pub y: c_float,
-        pub z: c_float,
-    }
+#[repr(C)]
+pub struct point3d {
+    pub x: c_float,
+    pub y: c_float,
+    pub z: c_float,
+}
 
-    #[repr(C)]
-    pub struct point4d {
-        pub x: c_float,
-        pub y: c_float,
-        pub z: c_float,
-        pub z2: c_float,
-    }
+#[repr(C)]
+pub struct point4d {
+    pub x: c_float,
+    pub y: c_float,
+    pub z: c_float,
+    pub z2: c_float,
+}
 
-    #[repr(C)]
-    pub struct dpoint3d {
-        pub x: c_double,
-        pub y: c_double,
-        pub z: c_double,
-    }
+#[repr(C)]
+pub struct dpoint3d {
+    pub x: c_double,
+    pub y: c_double,
+    pub z: c_double,
+}
 
 #[repr(C)]
 pub struct kv6data {
-    leng: c_long, 
-    xsiz: c_long, 
-    ysiz: c_long, 
-    zsiz: c_long,
-    xpiv: c_float, 
-    ypiv: c_float, 
-    zpiv: c_float,
-    numvoxs: c_ulong,
-    namoff: c_long,
-    lowermip: *const kv6data,
-    vox: *const kv6voxtype,      //numvoxs*sizeof(kv6voxtype)
-    xlen: *const c_ulong,  //xsiz*sizeof(long)
-    ylen: *const c_ushort, //xsiz*ysiz*sizeof(short)
+    pub leng: c_long, 
+    pub xsiz: c_long, 
+    pub ysiz: c_long, 
+    pub zsiz: c_long,
+    pub xpiv: c_float, 
+    pub ypiv: c_float, 
+    pub zpiv: c_float,
+    pub numvoxs: c_ulong,
+    pub namoff: c_long,
+    pub lowermip: *const kv6data,
+    pub vox: *const kv6voxtype,      //numvoxs*sizeof(kv6voxtype)
+    pub xlen: *const c_ulong,  //xsiz*sizeof(long)
+    pub ylen: *const c_ushort, //xsiz*ysiz*sizeof(short)
 }
 
-    #[repr(C)]
-    pub struct vx5sprite {
-        pub pos: point3d, /// position in VXL coordinates
-        pub flags: c_long, /// flags bit 0:0=use normal shading, 1=disable normal shading
+#[repr(C)]
+pub struct vx5sprite {
+    pub pos: point3d, /// position in VXL coordinates
+    pub flags: c_long, /// flags bit 0:0=use normal shading, 1=disable normal shading
                               /// flags bit 1:0=points to kv6data, 1=points to kfatype
                               /// flags bit 2:0=normal, 1=invisible sprite
-        pub s: point3d, /// kv6data.xsiz direction in VXL coordinates
+    pub s: point3d, /// kv6data.xsiz direction in VXL coordinates
 
-        pub voxnum: *mut kv6data, /// pointer to KV6 voxel data (bit 1 of flags = 0) or to KFA animation  (bit 1 of flags = 1)
-        pub h: point3d,          /// kv6data.ysiz direction in VXL coordinates
-        pub kfatim: c_long,        /// time (in milliseconds) of KFA animation
-        pub f: point3d,          /// kv6data.zsiz direction in VXL coordinates
-        /// make vx5sprite exactly 64 bytes :) ASSERT THAT IT IS 64 byte long!
-        pub okfatim: c_long
-    }
+    pub voxnum: *mut kv6data, /// pointer to KV6 voxel data (bit 1 of flags = 0) or to KFA animation  (bit 1 of flags = 1)
+    pub h: point3d,          /// kv6data.ysiz direction in VXL coordinates
+    pub kfatim: c_long,        /// time (in milliseconds) of KFA animation
+    pub f: point3d,          /// kv6data.zsiz direction in VXL coordinates
+    /// make vx5sprite exactly 64 bytes :) ASSERT THAT IT IS 64 byte long!
+    pub okfatim: c_long
+}
 
-    impl vx5sprite {
-        pub fn new() -> vx5sprite {
-            vx5sprite {
-                pos: point3d{x: 0f32, y: 0f32, z: 0f32},
-                flags: 0,
-                s: point3d{x: 0f32, y: 0f32, z: 0f32},
-                voxnum: ptr::null_mut(),
-                h: point3d{x: 0f32, y: 0f32, z: 0f32},
-                kfatim: 0,
-                f: point3d{x: 0f32, y: 0f32, z: 0f32},
-                okfatim: 0,
-            }
+impl vx5sprite {
+    pub fn new() -> vx5sprite {
+        vx5sprite {
+            pos: point3d{x: 0f32, y: 0f32, z: 0f32},
+            flags: 0,
+            s: point3d{x: 1f32, y: 0f32, z: 0f32},
+            voxnum: ptr::null_mut(),
+            h: point3d{x: 0f32, y: 1f32, z: 0f32},
+            kfatim: 0,
+            f: point3d{x: 0f32, y: 0f32, z: 1f32},
+            okfatim: 0,
         }
     }
+}
 
-    #[repr(C)]
-    pub struct hingetype {
-        parent: c_long,
-        p: [point3d, ..2],    
-        v: [point3d, ..2],
-        vmin: c_short,
-        vmax: c_short,
-        htype: c_char,
-        filler: [c_char, ..7]
-    }
+#[repr(C)]
+pub struct hingetype {
+    parent: c_long,
+    p: [point3d, ..2],    
+    v: [point3d, ..2],
+    vmin: c_short,
+    vmax: c_short,
+    htype: c_char,
+    filler: [c_char, ..7]
+}
 
-    #[repr(C)]
-    pub struct kv6voxtype {
-        col: c_long,
-        z: c_ushort,
-        vis: c_char,
-        dir: c_char,
-    }
+#[repr(C)]
+pub struct kv6voxtype {
+    col: c_long,
+    z: c_ushort,
+    vis: c_char,
+    dir: c_char,
+}
 
-    #[repr(C)]
-    pub struct seqtyp {
-        tim: c_long,
-        frm: c_long,
-    }
+#[repr(C)]
+pub struct seqtyp {
+    tim: c_long,
+    frm: c_long,
+}
 
-    #[repr(C)]
-    pub struct vspans {
-        z1: c_char,
-        z0: c_char,
-        x: c_char,
-        y: c_char,
-    }
+#[repr(C)]
+pub struct vspans {
+    z1: c_char,
+    z0: c_char,
+    x: c_char,
+    y: c_char,
+}
 
-    #[repr(C)]
-    pub struct kfatype {
-        pub numspr: c_long,
-        pub numhin: c_long,
-        pub numfrm: c_long,
-        pub seqnum: c_long,
-        pub namoff: c_long,
+#[repr(C)]
+pub struct kfatype {
+    pub numspr: c_long,
+    pub numhin: c_long,
+    pub numfrm: c_long,
+    pub seqnum: c_long,
+    pub namoff: c_long,
         basekv6: *const kv6data,    // kv6data
         spr: *const vx5sprite,      //[numspr]
         hinge: *const hingetype,    //[numhin]
@@ -136,25 +136,25 @@ pub struct kv6data {
         /// --------------------------  File related functions: --------------------------
         pub fn loadnul(ipo: *mut dpoint3d, ist: *mut dpoint3d, ihe: *mut dpoint3d, ifo: *mut dpoint3d);
         pub fn loadsxl (filename: *const c_char, vxlnam: *mut*mut c_char,
-                  skynam: *mut*mut c_char, globst: *mut*mut c_char) -> c_long;
+          skynam: *mut*mut c_char, globst: *mut*mut c_char) -> c_long;
 
         pub fn parspr (spr: &mut vx5sprite, userst: *mut*mut c_char) -> *const c_char;
 
         pub fn loaddta (filename: *const c_char, pos: &mut dpoint3d, right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
         pub fn loadpng (filename: *const c_char, pos: &mut dpoint3d,
-                  right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
+          right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
         pub fn loadbsp (filename: *const c_char, pos: &mut dpoint3d,
-                  right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d);
+          right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d);
 
         pub fn loadvxl (filename: *const c_char, pos: &mut dpoint3d,
-                  right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
+          right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
         pub fn savevxl (filename: *const c_char, pos: &mut dpoint3d,
-                 right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
+         right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
-        pub fn loadsky (filename: *const c_char);
+        pub fn loadsky (filename: *const c_char) -> c_long;
 
         /// -------------------------  Screen related functions: -------------------------
         pub fn voxsetframebuffer(ptr_to_dst_buffer: c_long, pitch: c_long, buffer_width: c_int, buffer_height: c_int);
@@ -171,22 +171,22 @@ pub struct kv6data {
         pub fn drawline2d (x1: c_float, y1: c_float, x2: c_float, y2: c_float, col: c_long);
 
         pub fn drawline3d (x0: c_float, y0: c_float, z0: c_float,
-                      x1: c_float, y1: c_float, z1: c_float, col: c_long);
+          x1: c_float, y1: c_float, z1: c_float, col: c_long);
 
         pub fn project2d (x: c_float, y: c_float, z: c_float, px: *mut c_float, py: *mut c_float, sx: *mut c_float) -> c_long;
 
         pub fn drawspherefill (ox: c_float, oy: c_float, oz: c_float, bakrad: c_float, col: c_long);
 
         pub fn drawpicinquad (rpic: c_long, rbpl: c_long, rxsiz: c_long, rysiz: c_long,
-                          wpic: c_long, wbpl: c_long, wxsiz: c_long, wysiz: c_long,
-                          x0: c_float, y0: c_float, x1: c_float, y1: c_float,
-                          x2: c_float, y2: c_float, x3: c_float, y3: c_float);
+          wpic: c_long, wbpl: c_long, wxsiz: c_long, wysiz: c_long,
+          x0: c_float, y0: c_float, x1: c_float, y1: c_float,
+          x2: c_float, y2: c_float, x3: c_float, y3: c_float);
 
         pub fn drawpolyquad (rpic: c_long, rbpl: c_long, rxsiz: c_long, rysiz: c_long,
-                         x0: c_float, y0: c_float, z0: c_float, u0: c_float, v0: c_float,
-                         x1: c_float, y1: c_float, z1: c_float, u1: c_float, v1: c_float,
-                         x2: c_float, y2: c_float, z2: c_float, u2: c_float, v2: c_float,
-                         x3: c_float, y3: c_float, z3: c_float);
+         x0: c_float, y0: c_float, z0: c_float, u0: c_float, v0: c_float,
+         x1: c_float, y1: c_float, z1: c_float, u1: c_float, v1: c_float,
+         x2: c_float, y2: c_float, z2: c_float, u2: c_float, v2: c_float,
+         x3: c_float, y3: c_float, z3: c_float);
 
         pub fn print4x6(x: c_long, y: c_long, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
 
@@ -204,7 +204,7 @@ pub struct kv6data {
         /// black,white: shade scale (ARGB format). For no effects, use (0,-1)
         ///   NOTE: if alphas of black&white are same, then alpha channel ignored
         pub fn drawtile (tf: c_long, tp: c_long, tx: c_long, ty: c_long, tcx: c_long, tcy: c_long,
-                    sx: c_long, sy: c_long, xz: c_long, yz: c_long, black: c_long, white: c_long);
+            sx: c_long, sy: c_long, xz: c_long, yz: c_long, black: c_long, white: c_long);
 
         /// Captures a screenshot of the current frame to disk. The current frame
         ///   is defined by the last call to the voxsetframebuffer function. NOTE:
@@ -349,11 +349,11 @@ pub struct kv6data {
         /// ihe: input&output: vector #2 to rotate
         /// ifo: input&output: vector #3 to rotate
         pub fn orthorotate (ox: c_float, oy: c_float, oz: c_float,
-                        ist: &point3d, ihe: &point3d, ifo: &point3d);
+            ist: &point3d, ihe: &point3d, ifo: &point3d);
 
         /// Math helper: same as orthorotate but for doubles
         pub fn dorthorotate (ox: c_double, oy: c_double, oz: c_double,
-                         ist: &dpoint3d, ihe: &dpoint3d, ifo: &dpoint3d);
+         ist: &dpoint3d, ihe: &dpoint3d, ifo: &dpoint3d);
 
         pub fn axisrotate(p: &mut point3d, axis: &point3d, w: c_float);
         
@@ -366,8 +366,8 @@ pub struct kv6data {
         ///              rat: ratio between first & second matrices to interpolate
         ///                   0 means ist=istr, etc..., 1 means ist=istr2, etc...
         pub fn slerp (istr: &point3d, ihei: &point3d, ifor: &point3d,
-                istr2: &point3d, ihei2: &point3d, ifor2: &point3d,
-                ist: &point3d, ihe: &point3d, ifo: &point3d, rat: &point3d);
+            istr2: &point3d, ihei2: &point3d, ifor2: &point3d,
+            ist: &point3d, ihe: &point3d, ifo: &point3d, rat: &point3d);
 
         /// Detect if 2 points have a direct line-of-sight
         /// p0: starting point
@@ -398,7 +398,7 @@ pub struct kv6data {
         /// vsc:  input: max multiple/fraction of v0's length to scan (1.0 for |v0|)
         ///     output: multiple/fraction of v0's length of hit point
         pub fn sprhitscan (p: &dpoint3d, d: &dpoint3d, spr: &vx5sprite, h: &lpoint3d,
-                      ind: &kv6voxtype, vsc: *mut c_float);
+          ind: &kv6voxtype, vsc: *mut c_float);
 
         /// Squish detection function: returns the radius of the biggest sphere that
         ///   can fit purely in air around the given point. Basically: c_float, it tells you
@@ -423,7 +423,7 @@ pub struct kv6data {
         ///  lhit: VXL map location that caused the collision
         /// returns: 1:collision: c_long, 0:no collision
         pub fn triscan (p0: &point3d, p1: &point3d, p2: &point3d,
-                  hit: &point3d, lhit: &lpoint3d) -> c_long;
+          hit: &point3d, lhit: &lpoint3d) -> c_long;
 
         /// Estimate normal vector direction. Useful for lighting / bouncing
         /// x,y,z: VXL map coordinate
@@ -462,7 +462,7 @@ pub struct kv6data {
         ///        -1: remove (subtractive CSG)
         /// bakit: 0:fast&permanent change, 1:backup (much slower: used in VOXED)
         pub fn setellipsoid (hit: &lpoint3d, hit2: &lpoint3d,
-                         hitrad: c_long, dacol: c_long, bakit: c_long);
+         hitrad: c_long, dacol: c_long, bakit: c_long);
 
         /// Render a cylinder to VXL memory (code is optimized!)
         ///    p0: endpoint #1
@@ -472,7 +472,7 @@ pub struct kv6data {
         ///        -1: remove (subtractive CSG)
         /// bakit: 0:fast&permanent change, 1:backup (much slower: used in VOXED)
         pub fn setcylinder (p0: &lpoint3d, p1: &lpoint3d, cr: c_long,
-                            dacol: c_long, bakit: c_long);
+            dacol: c_long, bakit: c_long);
 
         /// Render a box to VXL memory (code is optimized!)
         ///   hit: box corner #1
@@ -500,7 +500,7 @@ pub struct kv6data {
         ///        -1: remove (subtractive CSG)
         /// bakit: 0:fast&permanent change, 1:backup (much slower: used in VOXED)
         pub fn setsector (p: &point3d, point2: *const c_long, n: c_long,
-                         thick: c_float, dacol: c_long, bakit: c_long);
+         thick: c_float, dacol: c_long, bakit: c_long);
 
         /// Do CSG using pre-sorted spanlist.
         ///   lst: Spans (see meltspans() for structure description)
@@ -516,7 +516,7 @@ pub struct kv6data {
         ///    hxs,hys: dimensions of heightmap
         /// x0,y0,x1,y1: 2D box in VXL coordinates to apply additive heightmap CSG.
         pub fn setheightmap (hptr: *const c_char, hbpl: c_long, hxs: c_long, hys: c_long,
-                             x0: c_long, y0: c_long, x1: c_long, y1: c_long);
+         x0: c_long, y0: c_long, x1: c_long, y1: c_long);
 
         /// Render .KV6 voxel sprite to VXL memory. Instead of drawing the sprite
         ///   to the screen, this renders it permanently to VXL memory. This can
@@ -563,7 +563,7 @@ pub struct kv6data {
         /// maxx,maxy,maxz: bot/right/down corner of box used to restrict floodfill
         ///                (exclusive)
         pub fn setfloodfill3d (x: c_long, y: c_long, z: c_long, minx: c_long, miny: c_long, minz: c_long,
-                                                                maxx: c_long, maxy: c_long, maxz: c_long);
+            maxx: c_long, maxy: c_long, maxz: c_long);
 
         /// Fill in all hollow areas of map - mainly used in editor. Very slow! This
         /// will destroy any hidden "bonus" areas in your map.
@@ -575,7 +575,7 @@ pub struct kv6data {
         ///     rot: 0-47 possible rotation, all are axis-aligned
         /// bakit: 0:fast&permanent change, 1:backup (much slower: used in VOXED)
         pub fn setkvx (filename: *const c_char, ox: c_long, oy: c_long, oz: c_long,
-                     rot: c_long, bakit: c_long);
+         rot: c_long, bakit: c_long);
 
         /// Old lighting function (has aliasing artifacts)
         /// px,py,pz: origin of light source
@@ -583,14 +583,14 @@ pub struct kv6data {
         /// numang: angle density (recommended values: 512,1024,2048)
         /// intens: intensity scale (recommended values: 1,2)
         pub fn setflash (px: c_float, py: c_float, pz: c_float,
-                    flashradius: c_long, numang: c_long, intens: c_long);
+            flashradius: c_long, numang: c_long, intens: c_long);
 
         pub fn setnormflash(px: c_float, px: c_float, px: c_float, flash_radius: c_long, intens: c_long);
 
         /// ---------------------------- VXL MISC functions:  ----------------------------
 
         pub fn updatebbox (x0: c_long, y0: c_long, z0: c_long, x1: c_long, y1: c_long, z1: c_long,
-                      csgdel: c_long);
+          csgdel: c_long);
         pub fn updatevxl();
         pub fn genmipvxl (x0: c_long, y0: c_long, x1: c_long, y1: c_long);
         pub fn updatelighting (x0: c_long, y0: c_long, z0: c_long, x1: c_long, y1: c_long, z1: c_long);
@@ -606,7 +606,7 @@ pub struct kv6data {
         ///   (Call it after every set* call that removes voxels (subtractive CSG)
         ///   It remembers the location on an internal "check" list that will
         ///   be used in the following call to dofalls())
-        pub fn checkfloatinbox (x0: c_long, y0: c_long, z0: c_long, x1: c_long, y1: c_long, z1: c_long);
+pub fn checkfloatinbox (x0: c_long, y0: c_long, z0: c_long, x1: c_long, y1: c_long, z1: c_long);
 
         /// Call this once per frame (or perhaps at a slower constant rate 20hz-40hz)
         pub fn startfalls ();
@@ -618,7 +618,7 @@ pub struct kv6data {
         ///   (Call this only between a call to startfalls() and
         ///   finishfalls(). You MUST call it either 0 or 1 times between each
         ///   startfalls and finishfalls. (See sample code in GAME.C))
-        pub fn dofall (i: c_long);
+pub fn dofall (i: c_long);
 
         /// Works sort of like meltsphere(), but works with floating sections of the
         ///   .VXL map instead of spheres. This function can be used to make
@@ -682,7 +682,7 @@ pub struct kv6data {
         /// xsiz,ysiz: dimensions of destination image
         /// NOTE: You are responsible for calling free() on the returned pointer
         pub fn kpzload (filnam: *const c_char, pic: *const c_long, bpl: *const c_long,
-                      xsiz: *const c_long, ysiz: *const c_long);
+          xsiz: *const c_long, ysiz: *const c_long);
 
         /// This retrieves the dimensions of a compressed graphic file image loaded
         ///   into memory. It supports the same file types as kpzload().
@@ -701,7 +701,7 @@ pub struct kv6data {
         ///           Non-zero values are useful here for picture viewer programs.
         /// returns: -1:bad, 0:good
         pub fn kprender (buf: *const c_char, leng: c_long, frameptr: c_long, bpl: c_long,
-                        xdim: c_long, ydim: c_long, xoff: c_long, yoff: c_long) -> c_long;
+            xdim: c_long, ydim: c_long, xoff: c_long, yoff: c_long) -> c_long;
             /// ------------------------------- ZIP functions: -------------------------------
             /// These functions are all optional. If you want to distribute the game
         ///   without cluttering up people's hard drives with tons of small files,
