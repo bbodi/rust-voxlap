@@ -322,8 +322,8 @@ pub fn z_rotate(pos: &mut vec3, w: f32) {
 pub fn set_max_scan_dist_to_max() {
 
     unsafe {
-        let maxscandist = (2048f64 * 1.41421356237f64) as i32;
-        c_api::set_max_scan_dist_to_max(maxscandist);
+        //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
+        c_api::setMaxScanDistToMax();
     }
 }
 
@@ -419,5 +419,60 @@ pub fn load_sky(filename: &str) -> Result<(), ()> {
     } {
         0 => Ok(()),
         _ => Err(()),
+    }
+}
+
+pub fn set_raycast_density(param: i32) {
+    assert!(param >= 1, "Param cannot be < 0!");
+    unsafe {
+        c_api::set_anginc(param);
+    }
+}
+
+pub fn get_raycast_density() -> i32 {
+    unsafe {
+        c_api::get_anginc()
+    }
+}
+
+pub fn set_fog_color(param: Color) {
+    unsafe {
+        c_api::set_fogcol(param.to_u32());
+    }
+}
+
+pub fn set_kv6col(param: Color) {
+    unsafe {
+        c_api::set_kv6col(param.to_u32());
+    }
+}
+
+pub fn set_curcol(param: Color) {
+    unsafe {
+        c_api::set_curcol(param.to_u32());
+    }
+}
+
+pub fn set_curpow(param: c_float) {
+    unsafe {
+        c_api::set_curpow(param);
+    }
+}
+
+pub fn set_fallcheck(param: bool) {
+    unsafe {
+        c_api::set_fallcheck(param as i32);
+    }
+}
+
+pub fn generate_vxl_mipmapping(x0: i32, y0: i32, x1: i32, y1: i32) {
+    unsafe {
+        c_api::genmipvxl(x0, y0, x1, y1);
+    }
+}
+
+pub fn get_max_xy_dimension() -> i32 {
+    unsafe {
+        c_api::getVSID()
     }
 }

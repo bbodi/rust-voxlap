@@ -596,8 +596,19 @@ pub struct kfatype {
         pub fn updatelighting (x0: c_long, y0: c_long, z0: c_long, x1: c_long, y1: c_long, z1: c_long);
 
         /// custom
-        pub fn set_max_scan_dist_to_max(dist: c_long);
+        pub fn getVSID() -> c_long;
+        pub fn setMaxScanDistToMax();
+        pub fn setMaxScanDist(dist: c_long);
         pub fn setLightingMode(mode: c_long);
+
+        pub fn set_anginc(anginc: c_long);
+        pub fn get_anginc() -> c_long;
+    
+        pub fn set_fogcol(fogcol: c_long);
+        pub fn set_kv6col(kv6col: c_long);
+        pub fn set_curcol(curcol: c_long);
+        pub fn set_curpow(curpow: c_float);
+        pub fn set_fallcheck(fallcheck: c_long);
 
         /// ------------------------- Falling voxels functions: --------------------------
         /// NOTE: THIS FUNCTION IS OBSOLETE!
