@@ -146,7 +146,7 @@ pub struct kfatype {
           right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
         pub fn loadbsp (filename: *const c_char, pos: &mut dpoint3d,
-          right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d);
+          right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;
 
         pub fn loadvxl (filename: *const c_char, pos: &mut dpoint3d,
           right_vec: &mut dpoint3d, down_vec: &mut dpoint3d, forward_vec: &mut dpoint3d) -> c_long;

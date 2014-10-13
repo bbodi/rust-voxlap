@@ -60,6 +60,22 @@ impl vec3 {
         }
     }
 
+    pub fn identity() -> vec3 {
+        vec3 {
+            x: 1f32,
+            y: 1f32,
+            z: 1f32,
+        }
+    }
+
+    pub fn null() -> vec3 {
+        vec3 {
+            x: 0f32,
+            y: 0f32,
+            z: 0f32,
+        }
+    }
+
     fn as_point3d(&self) -> &c_api::point3d {
         unsafe {mem::transmute(self)}
     }
@@ -145,31 +161,6 @@ impl VxSprite {
     }
 }
 
-        /// This converts a spherical cut-out of the VXL map into a .KV6 sprite in
-        ///   memory. This function can be used to make walls fall over (with full
-        ///   rotation). It allocates a new vx5sprite sprite structure and you are
-        ///   responsible for freeing the memory using "free" in your own code.
-        ///   spr: new vx5sprite structure. Position & orientation are initialized
-        ///           so when you call drawsprite, it exactly matches the VXL map.
-        ///   hit: center of sphere
-        /// hitrad: radius of sphere
-        /// returns: 0:bad, >0:mass of captured object (# of voxels)
-//pub fn meltsphere (spr: &vx5sprite, hit: &lpoint3d, hitrad: c_long) -> c_long {
-pub fn melt_sphere(center: &ivec3, radius: i32) -> Result<(VxSprite, i32), ()> {
-    let mut spr = c_api::vx5sprite::new();
-    match unsafe {
-        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
-    } {
-        0 => Err(()),
-        x => Ok(
-            (VxSprite {
-                ptr: spr,
-                managed_by_voxlap: false,
-            }, x)
-        )
-    }
-}
-
 impl Drop for VxSprite {
     fn drop(&mut self) {
         if !self.managed_by_voxlap {
@@ -184,6 +175,22 @@ impl Drop for VxSprite {
 impl Add<vec3, vec3> for vec3 {
     fn add(&self, rhs: &vec3) -> vec3 {
         vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Sub<vec3, vec3> for vec3 {
+    fn sub(&self, rhs: &vec3) -> vec3 {
+        vec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+impl Mul<f32, vec3> for vec3 {
+    fn mul(&self, f: &f32) -> vec3 {
+        vec3 {
+            x: self.x * *f,
+            y: self.y * *f,
+            z: self.z * *f
+        }
     }
 }
 
@@ -304,6 +311,26 @@ pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
     let filename_ptr = c_str.as_ptr();
     match unsafe {
         c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
+    } {
+        1 => Ok(Orientation {
+            pos: vec3::from_dpoint3d(ipo),
+            right_vec: vec3::from_dpoint3d(ist),
+            down_vec: vec3::from_dpoint3d(ihe),
+            forward_vec: vec3::from_dpoint3d(ifo)
+        }),
+        _ => Err(0),
+    }
+}
+
+pub fn load_bsp(filename: &str) -> Result<Orientation, i32> {
+    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    match unsafe {
+        c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
     } {
         1 => Ok(Orientation {
             pos: vec3::from_dpoint3d(ipo),
@@ -526,5 +553,20 @@ pub fn can_see (starting_point: &vec3, ending_point: &vec3) -> VisibilityResult 
     } {
         1 => CanSee,
         _ => CannotSee(hit_pos)
+    }
+}
+
+pub fn melt_sphere(center: &ivec3, radius: i32) -> Result<(VxSprite, i32), ()> {
+    let mut spr = c_api::vx5sprite::new();
+    match unsafe {
+        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
+    } {
+        0 => Err(()),
+        x => Ok(
+            (VxSprite {
+                ptr: spr,
+                managed_by_voxlap: false,
+            }, x)
+        )
     }
 }
