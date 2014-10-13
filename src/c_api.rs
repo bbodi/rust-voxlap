@@ -311,7 +311,7 @@ pub struct kfatype {
         ///   hit: center of sphere
         /// hitrad: radius of sphere
         /// returns: 0:bad, >0:mass of captured object (# of voxels)
-        pub fn meltsphere (spr: &vx5sprite, hit: &lpoint3d, hitrad: c_long) -> c_long;
+        pub fn meltsphere (spr: &mut vx5sprite, hit: &lpoint3d, hitrad: c_long) -> c_long;
 
         /// This function is similar to meltsphere, except you can use any user-
         ///   defined shape (with some size limits). The user-defined shape is
@@ -374,7 +374,7 @@ pub struct kfatype {
         /// p1: ending point
         /// hit: integer VXL coordinate (closest to p0) that caused the collision
         /// returns: 1:didn't hit anything: c_float, 0:something is in the way
-        pub fn cansee (p0: &point3d, p1: &point3d, hit: &lpoint3d) -> c_long;
+        pub fn cansee (p0: &point3d, p1: &point3d, hit: &mut lpoint3d) -> c_long;
 
         /// Shoot a vector until it hits something or escapes the board
         ///  p: start position

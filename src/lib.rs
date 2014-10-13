@@ -7,6 +7,7 @@
 
 extern crate libc;
 
+use std::mem;
 use std::c_str::CString;
 use std::c_vec::CVec;
 use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
@@ -59,17 +60,20 @@ impl vec3 {
         }
     }
 
-    fn as_point3d(&self) -> c_api::point3d {
-        c_api::point3d {x: self.x as f32, y: self.y as f32, z: self.z as f32}
+    fn as_point3d(&self) -> &c_api::point3d {
+        unsafe {mem::transmute(self)}
     }
 
-    
-    fn as_lpoint3d(&self) -> c_api::lpoint3d {
-        c_api::lpoint3d {x: self.x as i32, y: self.y as i32, z: self.z as i32}
+    fn as_mut_point3d(&mut self) -> &mut c_api::point3d {
+        unsafe {mem::transmute(self)}
     }
 
-    fn as_dpoint3d(&self) -> c_api::dpoint3d {
-        c_api::dpoint3d {x: self.x as f64, y: self.y as f64, z: self.z as f64}
+    fn to_dpoint3d(&self) -> c_api::dpoint3d {
+        c_api::dpoint3d {
+            x: self.x as f64, 
+            y: self.y as f64, 
+            z: self.z as f64, 
+        }
     }
 
     fn from_dpoint3d(pos: c_api::dpoint3d) -> vec3 {
@@ -89,46 +93,94 @@ impl vec3 {
     }
 }
 
+#[deriving(PartialEq, Clone, Show)]
+pub struct ivec3 {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl ivec3 {
+    pub fn new(x: i32, y: i32, z: i32) -> ivec3 {
+        ivec3 {
+            x: x,
+            y: y,
+            z: z,
+        }
+    }
+    
+    fn as_lpoint3d(&self) -> &c_api::lpoint3d {
+        unsafe {mem::transmute(self)}
+    }
+
+    fn as_mut_lpoint3d(&mut self) -> &mut c_api::lpoint3d {
+        unsafe {mem::transmute(self)}
+    }
+}
+
 pub struct VxSprite {
     ptr: c_api::vx5sprite,
+    managed_by_voxlap: bool
 }
 
 impl VxSprite {
-
     pub fn new(filename: &str) -> VxSprite {
-
         let mut spr = c_api::vx5sprite::new();
         let c_str = filename.to_c_str();
         let filename_ptr = c_str.as_ptr();
-        println!("flags before: {}", spr.flags);
         unsafe {
             c_api::getspr(&mut spr, filename_ptr);
-            let kv6 = *spr.voxnum;
-            println!("[Rust] leng: {}", kv6.leng);
-            println!("[Rust] namoff: {}", kv6.namoff); 
-            println!("[Rust] lowermip: {}", kv6.lowermip);
-            println!("[Rust] vox: {}", kv6.vox);
-            println!("[Rust] xlen: {}", kv6.xlen);
-            println!("[Rust] ylen: {}", kv6.ylen);
         }
-        println!("flags after: {}", spr.flags);
 
-        VxSprite{ptr: spr}
+        VxSprite {
+            ptr: spr,
+            managed_by_voxlap: true,
+        }
     }
 
     pub fn set_pos(&mut self, pos: &vec3) {
-
         unsafe {
-            self.ptr.pos = pos.as_point3d();
+            self.ptr.pos = *pos.as_point3d();
         }
     }
-
 }
 
-// The `Add<T, U>` trait needs two generic parameters:
-// * T is the type of the RHS summand, and
-// * U is the type of the sum
-// This block implements the operation: Foo + Bar = FooBar
+        /// This converts a spherical cut-out of the VXL map into a .KV6 sprite in
+        ///   memory. This function can be used to make walls fall over (with full
+        ///   rotation). It allocates a new vx5sprite sprite structure and you are
+        ///   responsible for freeing the memory using "free" in your own code.
+        ///   spr: new vx5sprite structure. Position & orientation are initialized
+        ///           so when you call drawsprite, it exactly matches the VXL map.
+        ///   hit: center of sphere
+        /// hitrad: radius of sphere
+        /// returns: 0:bad, >0:mass of captured object (# of voxels)
+//pub fn meltsphere (spr: &vx5sprite, hit: &lpoint3d, hitrad: c_long) -> c_long {
+pub fn melt_sphere(center: &ivec3, radius: i32) -> Result<(VxSprite, i32), ()> {
+    let mut spr = c_api::vx5sprite::new();
+    match unsafe {
+        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
+    } {
+        0 => Err(()),
+        x => Ok(
+            (VxSprite {
+                ptr: spr,
+                managed_by_voxlap: false,
+            }, x)
+        )
+    }
+}
+
+impl Drop for VxSprite {
+    fn drop(&mut self) {
+        if !self.managed_by_voxlap {
+            println!("FREE");
+            unsafe {
+                c_api::freekv6(&*self.ptr.voxnum);
+            }
+        }
+    }
+}
+
 impl Add<vec3, vec3> for vec3 {
     fn add(&self, rhs: &vec3) -> vec3 {
         vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
@@ -214,7 +266,6 @@ pub fn set_frame_buffer(dst_c_vec: CVec<u8>, pitch: i32, buffer_width: i32, buff
 }
 
 pub fn load_default_map() -> Orientation {
-
     unsafe {
         let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
@@ -245,7 +296,6 @@ pub fn load_default_map() -> Orientation {
 }*/
 
 pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
-
     let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
     let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
     let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
@@ -266,61 +316,50 @@ pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
 }
 
 pub fn update_vxl() {
-
     unsafe {
         c_api::updatevxl();
     }
 }
 
 pub fn set_camera(ori: &Orientation, center_x: f32, center_y: f32, focal_length: f32) {
-
     unsafe {
-        c_api::setcamera(&ori.pos.as_dpoint3d(), 
-            &ori.right_vec.as_dpoint3d(), 
-            &ori.down_vec.as_dpoint3d(), 
-            &ori.forward_vec.as_dpoint3d(), 
+        c_api::setcamera(&ori.pos.to_dpoint3d(), 
+            &ori.right_vec.to_dpoint3d(), 
+            &ori.down_vec.to_dpoint3d(), 
+            &ori.forward_vec.to_dpoint3d(), 
             center_x, center_y, focal_length);
     }
 }
 
 pub fn opticast() {
-
     unsafe {
         c_api::opticast();
     }
 }
 
 pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
-
+    let mut dpos = pos.to_dpoint3d();
     unsafe {
-        let mut dpoint3d = pos.as_dpoint3d();
-        c_api::clipmove(&mut dpoint3d, &move_vec.as_dpoint3d(), acr);
-        pos.fill_from_dpoint3d(dpoint3d);
-    }   
+        c_api::clipmove(&mut dpos, &move_vec.to_dpoint3d(), acr);
+    } 
+    pos.fill_from_dpoint3d(dpos);
 }
 
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
-
     unsafe {
-        let mut point3d = pos.as_point3d();
-        c_api::axisrotate(&mut point3d, &axis.as_point3d(), w);
-        pos.fill_from_point3d(point3d);
+        c_api::axisrotate(pos.as_mut_point3d(), axis.as_point3d(), w);
     }
 }
 
 pub fn z_rotate(pos: &mut vec3, w: f32) {
-
     unsafe {
         let axis = c_api::point3d{ x: 0.0, y: 0.0, z: 1.0 };
-        let mut point3d = pos.as_point3d();
-        c_api::axisrotate(&mut point3d, &axis, w);
-        pos.fill_from_point3d(point3d);
+        c_api::axisrotate(pos.as_mut_point3d(), &axis, w);
     }
 }
 
 
 pub fn set_max_scan_dist_to_max() {
-
     unsafe {
         //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
         c_api::setMaxScanDistToMax();
@@ -328,28 +367,19 @@ pub fn set_max_scan_dist_to_max() {
 }
 
 pub fn set_norm_flash(pos: &vec3, flash_radius: i32, intens: i32) {
-
     unsafe {
         c_api::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
     }
 }
 
-pub fn set_cube(pos: &vec3, col: Color) {
 
+pub fn set_sphere(pos: &ivec3, radius: i32, operation_type: CsgOperationType) {
     unsafe {
-        c_api::setcube(pos.x as i32, pos.y as i32, pos.z as i32, col.to_u32());
-    }
-}
-
-pub fn set_sphere(pos: &vec3, radius: i32, dacol: i32) {
-
-    unsafe {
-        c_api::setsphere(&pos.as_lpoint3d(), radius, dacol);
+        c_api::setsphere(pos.as_lpoint3d(), radius, operation_type.as_int());
     }
 }
 
 pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
-
     unsafe {
         c_api::updatelighting(x0, y0, z0, x1, y1, z1);
     }
@@ -384,14 +414,12 @@ pub fn draw_sprite(spr: &VxSprite) {
 }
 
 pub fn set_kv6_into_vxl_memory(spr: &VxSprite, operation_type: CsgOperationType) {
-
     unsafe {
         c_api::setkv6(&spr.ptr, operation_type.as_int());
     }
 }
 
 pub fn set_lighting_mode(mode: LightingMode) {
-
     let m = match mode {
         NoSpecialLighting => 0,
         SimpleEstimatedNormalLighting => 1,
@@ -403,12 +431,17 @@ pub fn set_lighting_mode(mode: LightingMode) {
     
 }
 
-pub fn set_rect(p1: &vec3, p2: &vec3, mode: CsgOperationType) {
-
+pub fn set_rect(p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
     unsafe {
-        c_api::setrect(&p1.as_lpoint3d(), &p2.as_lpoint3d(), mode.as_int());
+        c_api::setrect(p1.as_lpoint3d(), p2.as_lpoint3d(), mode.as_int());
     }
-    
+}
+
+pub fn set_cube(pos: &ivec3, col: Option<Color>) {
+    unsafe {
+        let col = col.map_or(-1, |c| c.to_u32());
+        c_api::setcube(pos.x, pos.y, pos.z, col);
+    }
 }
 
 pub fn load_sky(filename: &str) -> Result<(), ()> {
@@ -472,7 +505,26 @@ pub fn generate_vxl_mipmapping(x0: i32, y0: i32, x1: i32, y1: i32) {
 }
 
 pub fn get_max_xy_dimension() -> i32 {
+    unsafe { c_api::getVSID() }
+}
+
+pub fn draw_sphere_fill(pos: &vec3, radius: f32, col: Color) {
     unsafe {
-        c_api::getVSID()
+        c_api::drawspherefill(pos.x, pos.y, pos.z, radius, col.to_u32());
+    }
+}
+
+pub enum VisibilityResult {
+    CanSee,
+    CannotSee(ivec3),
+}
+
+pub fn can_see (starting_point: &vec3, ending_point: &vec3) -> VisibilityResult {
+    let mut hit_pos = ivec3::new(0, 0, 0);
+    match unsafe {
+        c_api::cansee(starting_point.as_point3d(), ending_point.as_point3d(), hit_pos.as_mut_lpoint3d())
+    } {
+        1 => CanSee,
+        _ => CannotSee(hit_pos)
     }
 }
