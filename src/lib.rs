@@ -109,6 +109,28 @@ impl vec3 {
     }
 }
 
+impl Add<vec3, vec3> for vec3 {
+    fn add(&self, rhs: &vec3) -> vec3 {
+        vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Sub<vec3, vec3> for vec3 {
+    fn sub(&self, rhs: &vec3) -> vec3 {
+        vec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+impl Mul<f32, vec3> for vec3 {
+    fn mul(&self, f: &f32) -> vec3 {
+        vec3 {
+            x: self.x * *f,
+            y: self.y * *f,
+            z: self.z * *f
+        }
+    }
+}
+
 #[deriving(PartialEq, Clone, Show)]
 pub struct ivec3 {
     pub x: i32,
@@ -131,6 +153,28 @@ impl ivec3 {
 
     fn as_mut_lpoint3d(&mut self) -> &mut c_api::lpoint3d {
         unsafe {mem::transmute(self)}
+    }
+}
+
+impl Add<ivec3, ivec3> for ivec3 {
+    fn add(&self, rhs: &ivec3) -> ivec3 {
+        ivec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Sub<ivec3, ivec3> for ivec3 {
+    fn sub(&self, rhs: &ivec3) -> ivec3 {
+        ivec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+impl Mul<i32, ivec3> for ivec3 {
+    fn mul(&self, f: &i32) -> ivec3 {
+        ivec3 {
+            x: self.x * *f,
+            y: self.y * *f,
+            z: self.z * *f
+        }
     }
 }
 
@@ -163,36 +207,16 @@ impl VxSprite {
 
 impl Drop for VxSprite {
     fn drop(&mut self) {
-        if !self.managed_by_voxlap {
+        if !self.managed_by_voxlap && self.ptr.voxnum != ptr::null_mut() {
             println!("FREE");
             unsafe {
+                println!("ptr: {}", self.ptr.voxnum);
                 c_api::freekv6(&*self.ptr.voxnum);
             }
         }
     }
 }
 
-impl Add<vec3, vec3> for vec3 {
-    fn add(&self, rhs: &vec3) -> vec3 {
-        vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
-    }
-}
-
-impl Sub<vec3, vec3> for vec3 {
-    fn sub(&self, rhs: &vec3) -> vec3 {
-        vec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
-    }
-}
-
-impl Mul<f32, vec3> for vec3 {
-    fn mul(&self, f: &f32) -> vec3 {
-        vec3 {
-            x: self.x * *f,
-            y: self.y * *f,
-            z: self.z * *f
-        }
-    }
-}
 
 #[deriving(PartialEq, Clone, Show)]
 pub struct Orientation {
@@ -556,17 +580,13 @@ pub fn can_see (starting_point: &vec3, ending_point: &vec3) -> VisibilityResult 
     }
 }
 
-pub fn melt_sphere(center: &ivec3, radius: i32) -> Result<(VxSprite, i32), ()> {
+pub fn melt_sphere(center: &ivec3, radius: i32) -> (VxSprite, i32) {
     let mut spr = c_api::vx5sprite::new();
-    match unsafe {
+    let melted_voxel_count = unsafe {
         c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
-    } {
-        0 => Err(()),
-        x => Ok(
-            (VxSprite {
-                ptr: spr,
-                managed_by_voxlap: false,
-            }, x)
-        )
-    }
+    };
+    (VxSprite {
+        ptr: spr,
+        managed_by_voxlap: false,
+    }, melted_voxel_count)
 }
