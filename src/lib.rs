@@ -7,11 +7,10 @@
 
 extern crate libc;
 
-use libc::funcs::c95::stdlib::free;
 use std::mem;
 use std::c_str::CString;
 use std::c_vec::CVec;
-use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
+use libc::{free, c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
 use std::ptr;
 
 mod c_api;
@@ -597,31 +596,20 @@ pub struct Image {
     pub width: i32,
     pub height: i32,
     pub bytes_per_line: i32,
-    ptr: *mut libc::types::common::c95::c_void,
+    ptr: *mut c_void,
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
-        println!("FREE image");
+        println!("FREE image: {}", self.ptr as i32);
         unsafe {
+            println!("FREE image: {}", *(self.ptr as *mut i32));
             free(self.ptr);
         }
     }
 }
-/// Easy picture loading function. This does most of the background work for
-        ///   you. It allocates the buffer for the uncompressed image for you, and
-        ///   loads PNG,JPG,TGA,GIF,PCX,BMP files, even handling pictures inside ZIP
-        ///   files. Kpzload() always writes 32-bit ARGB format (even if source is
-        ///   less).
-        ///   filnam: name of the graphic file (can be inside ZIP file).
-        ///      pic: pointer to top-left corner of destination uncompressed image
-        ///      bpl: pitch (bytes per line) of destination uncompressed image
-        /// xsiz,ysiz: dimensions of destination image
-        /// NOTE: You are responsible for calling free() on the returned pointer
-    /*    pub fn kpzload (filnam: *const c_char, pic: *const c_long, bpl: *const c_long,
-          xsiz: *const c_long, ysiz: *const c_long);*/
 
-pub fn load_image (filename: &str) -> Image {
+pub fn load_image(filename: &str) -> Image {
     let c_str = filename.to_c_str();
     let filename_ptr = c_str.as_ptr();
     let mut ptr: i32 = 0;
@@ -631,10 +619,28 @@ pub fn load_image (filename: &str) -> Image {
     unsafe {
         c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
     }
+    println!("load_image image: {:x}", ptr);
+    unsafe { 
+        let asd = (ptr as *mut c_long);       
+        println!("free image: {}", asd);
+        free(asd as *mut c_void);
+    }
+    
+    println!("load_image image: w: {}, h: {}", xsiz, ysiz);
     Image {
         width: xsiz,
         height: ysiz,
         bytes_per_line: bpl,
-        ptr: ptr as *mut libc::types::common::c95::c_void,
+        ptr: ptr as *mut c_void,
+    }
+}
+
+pub fn draw_image(img: &Image, pos0: &vec3, pos1: &vec3, pos2: &vec3, pos3: &vec3) {
+    unsafe {
+        c_api::drawpolyquad(img.ptr as i32, img.bytes_per_line, img.width, img.height,
+            pos0.x, pos0.y, pos0.z, 0f32, 0f32,
+            pos1.x, pos1.y, pos1.z, 0f32, 100f32,
+            pos2.x, pos2.y, pos2.z, 100f32, 100f32,
+            pos3.x, pos3.y, pos3.z);
     }
 }
