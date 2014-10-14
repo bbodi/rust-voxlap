@@ -692,8 +692,8 @@ pub fn dofall (i: c_long);
         ///      bpl: pitch (bytes per line) of destination uncompressed image
         /// xsiz,ysiz: dimensions of destination image
         /// NOTE: You are responsible for calling free() on the returned pointer
-        pub fn kpzload (filnam: *const c_char, pic: *const c_long, bpl: *const c_long,
-          xsiz: *const c_long, ysiz: *const c_long);
+        pub fn kpzload (filnam: *const c_char, pic: *mut c_long, bpl: *mut c_long,
+          xsiz: *mut c_long, ysiz: *mut c_long);
 
         /// This retrieves the dimensions of a compressed graphic file image loaded
         ///   into memory. It supports the same file types as kpzload().

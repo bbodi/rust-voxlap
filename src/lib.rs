@@ -7,6 +7,7 @@
 
 extern crate libc;
 
+use libc::funcs::c95::stdlib::free;
 use std::mem;
 use std::c_str::CString;
 use std::c_vec::CVec;
@@ -589,4 +590,51 @@ pub fn melt_sphere(center: &ivec3, radius: i32) -> (VxSprite, i32) {
         ptr: spr,
         managed_by_voxlap: false,
     }, melted_voxel_count)
+}
+
+
+pub struct Image {
+    pub width: i32,
+    pub height: i32,
+    pub bytes_per_line: i32,
+    ptr: *mut libc::types::common::c95::c_void,
+}
+
+impl Drop for Image {
+    fn drop(&mut self) {
+        println!("FREE image");
+        unsafe {
+            free(self.ptr);
+        }
+    }
+}
+/// Easy picture loading function. This does most of the background work for
+        ///   you. It allocates the buffer for the uncompressed image for you, and
+        ///   loads PNG,JPG,TGA,GIF,PCX,BMP files, even handling pictures inside ZIP
+        ///   files. Kpzload() always writes 32-bit ARGB format (even if source is
+        ///   less).
+        ///   filnam: name of the graphic file (can be inside ZIP file).
+        ///      pic: pointer to top-left corner of destination uncompressed image
+        ///      bpl: pitch (bytes per line) of destination uncompressed image
+        /// xsiz,ysiz: dimensions of destination image
+        /// NOTE: You are responsible for calling free() on the returned pointer
+    /*    pub fn kpzload (filnam: *const c_char, pic: *const c_long, bpl: *const c_long,
+          xsiz: *const c_long, ysiz: *const c_long);*/
+
+pub fn load_image (filename: &str) -> Image {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    let mut ptr: i32 = 0;
+    let mut bpl: i32 = 0;
+    let mut xsiz: i32 = 0;
+    let mut ysiz: i32 = 0;
+    unsafe {
+        c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
+    }
+    Image {
+        width: xsiz,
+        height: ysiz,
+        bytes_per_line: bpl,
+        ptr: ptr as *mut libc::types::common::c95::c_void,
+    }
 }
