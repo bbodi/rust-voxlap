@@ -8,6 +8,7 @@
 extern crate libc;
 
 use std::mem;
+use std::rand;
 use std::c_str::CString;
 use std::c_vec::CVec;
 use libc::{free, c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
@@ -74,6 +75,26 @@ impl vec3 {
             y: 0f32,
             z: 0f32,
         }
+    }
+
+    pub fn rand() -> vec3 {
+        let mut vec = vec3::null();
+        vec.z = (rand::random::<i32>() & 32767) as f32 / 16383.5f32 - 1.0f32;
+        let mut f = (((rand::random::<i32>() & 32767)) as f32 / 16383.5f32 - 1.0f32) * std::num::Float::pi(); 
+        vec.x = f.cos(); 
+        vec.y = f.sin();
+        f = (1.0 - vec.z * vec.z).sqrt(); 
+        vec.x *= f; 
+        vec.y *= f; 
+        return vec;
+    }
+
+    fn from_point3d(pos: c_api::point3d) -> vec3 {
+        let mut vec = vec3::null();
+        vec.x = pos.x as f32;
+        vec.y = pos.y as f32;
+        vec.z = pos.z as f32;
+        return vec;
     }
 
     fn as_point3d(&self) -> &c_api::point3d {
@@ -154,6 +175,14 @@ impl ivec3 {
     fn as_mut_lpoint3d(&mut self) -> &mut c_api::lpoint3d {
         unsafe {mem::transmute(self)}
     }
+
+    pub fn to_vec3(&self) -> vec3 {
+        vec3 {
+            x: self.x as f32,
+            y: self.y as f32,
+            z: self.z as f32,
+        }
+    }
 }
 
 impl Add<ivec3, ivec3> for ivec3 {
@@ -203,12 +232,24 @@ impl VxSprite {
             self.ptr.pos = *pos.as_point3d();
         }
     }
+
+    pub fn get_pos(&self) -> vec3 {
+        unsafe {
+            vec3::from_point3d(self.ptr.pos)
+        }
+    }
+
+    pub fn add_pos(&mut self, dir: &vec3) {
+        unsafe {
+            self.ptr.pos = *(vec3::from_point3d(self.ptr.pos) + *dir).as_point3d();
+        }
+    }
 }
 
 impl Drop for VxSprite {
     fn drop(&mut self) {
         if !self.managed_by_voxlap && self.ptr.voxnum != ptr::null_mut() {
-            println!("FREE");
+            println!("FREE VxSprite");
             unsafe {
                 println!("ptr: {}", self.ptr.voxnum);
                 c_api::freekv6(&*self.ptr.voxnum);
@@ -231,14 +272,13 @@ impl Orientation {
 }
 
 
-
-
+#[deriving(PartialEq, Clone, Show)]
 pub enum Color {
     RGB(u8, u8, u8),
 }
 
 impl Color {
-    pub fn to_u32(&self) -> i32 {
+    pub fn to_i32(&self) -> i32 {
         match self {
             &RGB(r, g, b) => {
                 (r as i32 << 16) | (g as i32 << 8) | (b as i32)
@@ -246,7 +286,7 @@ impl Color {
         }
     }
 
-    pub fn from_u32(pixel: i32) -> Color {
+    pub fn from_i32(pixel: i32) -> Color {
         let r: u8 = 0;
         let g: u8 = 0;
         let b: u8 = 0;
@@ -283,7 +323,7 @@ pub fn print6x8(x: i32, y: i32, fg_color: Color, bg_color: Color, text: &str) {
         if (y >= 600 - 7) {
             fail!("print6x8: y pos: {}", y);
         }
-        c_api::print6x8(x, y, fg_color.to_u32(), bg_color.to_u32(), ptr);
+        c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
 
     }   
 }
@@ -446,14 +486,14 @@ pub fn draw_line_2d(x1: i32, y1: i32, x2: i32, y2: i32, col: Color) {
     assert!(in_screen(y1), "y1 = {}", y1);
     assert!(in_screen(y2), "y2 = {}", y2);
     unsafe {
-        c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_u32());
+        c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
     }
 }
 
 pub fn draw_point_3d(pos: &vec3, col: Color) {
 
     unsafe {
-        c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_u32());
+        c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_i32());
     }
 }
 
@@ -490,7 +530,7 @@ pub fn set_rect(p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
 
 pub fn set_cube(pos: &ivec3, col: Option<Color>) {
     unsafe {
-        let col = col.map_or(-1, |c| c.to_u32());
+        let col = col.map_or(-1, |c| c.to_i32());
         c_api::setcube(pos.x, pos.y, pos.z, col);
     }
 }
@@ -521,19 +561,19 @@ pub fn get_raycast_density() -> i32 {
 
 pub fn set_fog_color(param: Color) {
     unsafe {
-        c_api::set_fogcol(param.to_u32());
+        c_api::set_fogcol(param.to_i32());
     }
 }
 
 pub fn set_kv6col(param: Color) {
     unsafe {
-        c_api::set_kv6col(param.to_u32());
+        c_api::set_kv6col(param.to_i32());
     }
 }
 
 pub fn set_curcol(param: Color) {
     unsafe {
-        c_api::set_curcol(param.to_u32());
+        c_api::set_curcol(param.to_i32());
     }
 }
 
@@ -561,7 +601,7 @@ pub fn get_max_xy_dimension() -> i32 {
 
 pub fn draw_sphere_fill(pos: &vec3, radius: f32, col: Color) {
     unsafe {
-        c_api::drawspherefill(pos.x, pos.y, pos.z, radius, col.to_u32());
+        c_api::drawspherefill(pos.x, pos.y, pos.z, radius, col.to_i32());
     }
 }
 
@@ -596,15 +636,32 @@ pub struct Image {
     pub width: i32,
     pub height: i32,
     pub bytes_per_line: i32,
-    ptr: *mut c_void,
+    ptr: *const i32,
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
         println!("FREE image: {}", self.ptr as i32);
         unsafe {
-            println!("FREE image: {}", *(self.ptr as *mut i32));
-            free(self.ptr);
+            //c_api::free(self.ptr);
+        }
+    }
+}
+
+impl Image {
+    pub fn get_pixel(&self, x: i32, y: i32) -> Color {
+        let elem_count = (self.width * self.height) as uint;
+        unsafe {
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr, len: elem_count } );
+            Color::from_i32(slice[(y * self.width + x) as uint])
+        }
+    }
+
+    pub fn pixels(&self) -> &[i32] {
+        let elem_count = (self.width * self.height) as uint;
+        unsafe {
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr, len: elem_count } );
+            return slice;
         }
     }
 }
@@ -616,22 +673,16 @@ pub fn load_image(filename: &str) -> Image {
     let mut bpl: i32 = 0;
     let mut xsiz: i32 = 0;
     let mut ysiz: i32 = 0;
+
     unsafe {
         c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
     }
-    println!("load_image image: {:x}", ptr);
-    unsafe { 
-        let asd = (ptr as *mut c_long);       
-        println!("free image: {}", asd);
-        free(asd as *mut c_void);
-    }
-    
-    println!("load_image image: w: {}, h: {}", xsiz, ysiz);
+    println!("bpl: {}", bpl);
     Image {
         width: xsiz,
         height: ysiz,
         bytes_per_line: bpl,
-        ptr: ptr as *mut c_void,
+        ptr: ptr as *const i32,
     }
 }
 
@@ -639,8 +690,30 @@ pub fn draw_image(img: &Image, pos0: &vec3, pos1: &vec3, pos2: &vec3, pos3: &vec
     unsafe {
         c_api::drawpolyquad(img.ptr as i32, img.bytes_per_line, img.width, img.height,
             pos0.x, pos0.y, pos0.z, 0f32, 0f32,
-            pos1.x, pos1.y, pos1.z, 0f32, 100f32,
-            pos2.x, pos2.y, pos2.z, 100f32, 100f32,
+            pos1.x, pos1.y, pos1.z, 0f32, img.height as f32,
+            pos2.x, pos2.y, pos2.z, img.width as f32, img.height as f32,
             pos3.x, pos3.y, pos3.z);
     }
+}
+
+pub fn is_voxel_solid(pos: &ivec3) -> bool {
+    unsafe {
+        c_api::isvoxelsolid(pos.x, pos.y, pos.z) == 1
+    }
+}
+
+pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
+    let x_step = if start_pos.x < end_pos.x {1} else {-1};
+    let y_step = if start_pos.y < end_pos.y {1} else {-1};
+    let z_step = if start_pos.z < end_pos.z {1} else {-1};
+    for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
+        for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
+            for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
+                if is_voxel_solid(&ivec3::new(x, y, z)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
 }
