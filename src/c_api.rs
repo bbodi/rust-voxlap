@@ -1,4 +1,4 @@
-use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_uchar, c_ushort, c_ulong};
+use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_uchar, c_ushort, c_uint, c_ulong};
 use std::ptr;
 
 #[repr(C)]
@@ -157,7 +157,7 @@ pub struct kfatype {
         pub fn loadsky (filename: *const c_char) -> c_long;
 
         /// -------------------------  Screen related functions: -------------------------
-        pub fn voxsetframebuffer(ptr_to_dst_buffer: c_long, pitch: c_long, buffer_width: c_int, buffer_height: c_int);
+        pub fn voxsetframebuffer(ptr_to_dst_buffer: c_long, pitch: c_long, buffer_width: c_uint, buffer_height: c_uint);
 
         pub fn setsideshades (sto: c_char, sbo: c_char, sle: c_char, sri: c_char, sup: c_char, sdo: c_char);
 
@@ -190,7 +190,7 @@ pub struct kfatype {
 
         pub fn print4x6(x: c_long, y: c_long, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
 
-        pub fn print6x8(x: c_long, y: c_long, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
+        pub fn print6x8(x: c_ulong, y: c_ulong, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
 
         /// Draws a 32-bit color texture from memory to the screen. This is the
         ///   low-level function used to draw text loaded from a PNG,JPG,TGA,GIF.
@@ -332,7 +332,7 @@ pub struct kfatype {
         /// lstnum: number of columns on list
         ///  offs: offset of top-left corner in VXL coordinates
         /// returns: mass (in voxel units), returns 0 if error (or no voxels)
-        pub fn meltspans (spr: &vx5sprite, lst: &[vspans], lstnum: c_long, offs: &lpoint3d) -> c_long;
+        pub fn meltspans (spr: &vx5sprite, lst: *const vspans, lstnum: c_long, offs: &lpoint3d) -> c_long;
         /// -------------------------  Physics helper functions: -------------------------
         /// Math helper: The vectors are refreshed to be perpendicular to each other
         ///   and have unit length. v0 does not change orientation.
@@ -448,7 +448,7 @@ pub struct kfatype {
         ///   0: air
         ///   1: unexposed solid
         /// else: address to color in vbuf (this can never be 0 or 1)
-        pub fn sgetcube (x: c_long, y: c_long, z: c_long) -> c_long;
+        pub fn getcube (x: c_long, y: c_long, z: c_long) -> c_long;
 
         /// --------------------------- VXL writing functions: ---------------------------
 

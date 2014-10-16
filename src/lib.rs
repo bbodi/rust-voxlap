@@ -9,6 +9,10 @@ extern crate libc;
 
 pub use c_api::vspans;
 
+
+use std::collections::HashMap;
+use std::io::File;
+
 use std::mem;
 use std::rand;
 use std::c_str::CString;
@@ -299,20 +303,25 @@ impl Color {
     pub fn to_i32(&self) -> i32 {
         match self {
             &RGB(r, g, b) => {
-               (0x20 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
-            }
-        }
-    }
+             (0x20 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
+         }
+     }
+ }
 
-    pub fn from_i32(pixel: i32) -> Color {
-        let r: u8 = 0;
-        let g: u8 = 0;
-        let b: u8 = 0;
+ pub fn from_i32(pixel: i32) -> Color {
+    let r: u8 = 0;
+    let g: u8 = 0;
+    let b: u8 = 0;
 
-        unsafe {
-            RGB( ((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
-        }
+    unsafe {
+        RGB( ((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
     }
+}
+}
+
+pub struct VoxlapRenderer {
+    screen_width: u32,
+    screen_height: u32,
 }
 
 pub fn init() -> Result<(), int> {
@@ -333,24 +342,62 @@ pub fn uninit() {
     }
 }
 
-pub fn print6x8(x: i32, y: i32, fg_color: Color, bg_color: Color, text: &str) {
+impl VoxlapRenderer {
+    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
+        assert!(self.in_screen(x+7), "x = {}", x);
+        let c_str = text.to_c_str();
+        let ptr = c_str.as_ptr();
+        unsafe {
+            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
 
-    let c_str = text.to_c_str();
-    let ptr = c_str.as_ptr();
-    unsafe {
-        if (y >= 600 - 7) {
-            fail!("print6x8: y pos: {}", y);
         }
-        c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+    }
 
-    }   
+    fn in_screen(&self, num: u32) -> bool {
+        num >= 0 && num < self.screen_width
+    }
+
+    pub fn draw_line_2d(&self, x1: u32, y1: u32, x2: u32, y2: u32, col: Color) {
+        assert!(self.in_screen(x1), "x1 = {}", x1);
+        assert!(self.in_screen(x2), "x2 = {}", x2);
+        assert!(self.in_screen(y1), "y1 = {}", y1);
+        assert!(self.in_screen(y2), "y2 = {}", y2);
+        unsafe {
+            c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
+        }
+    }
+
+    pub fn draw_point_3d(&self, pos: &vec3, col: Color) {
+        unsafe {
+            c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_i32());
+        }
+    }
+
+    pub fn set_camera(&self, ori: &Orientation, focal_length: f32) {
+        unsafe {
+            c_api::setcamera(&ori.pos.to_dpoint3d(), 
+                &ori.right_vec.to_dpoint3d(), 
+                &ori.down_vec.to_dpoint3d(), 
+                &ori.forward_vec.to_dpoint3d(), 
+                self.screen_width as f32* 0.5f32, self.screen_height as f32*0.5f32, self.screen_width as f32 * 0.5f32 * focal_length);
+        }
+    }
+
+    pub fn opticast(&self) {
+        unsafe {
+            c_api::opticast();
+        }
+    }
 }
 
-pub fn set_frame_buffer(dst_c_vec: CVec<u8>, pitch: i32, buffer_width: i32, buffer_height: i32) {
-
+pub fn set_frame_buffer(dst_c_vec: CVec<u8>, pitch: i32, buffer_width: u32, buffer_height: u32) -> VoxlapRenderer {
     unsafe {
         let ptr = dst_c_vec.unwrap() as i32;
         c_api::voxsetframebuffer(ptr, pitch, buffer_width, buffer_height);
+    }
+    VoxlapRenderer {
+        screen_width: buffer_width,
+        screen_height: buffer_height
     }
 }
 
@@ -430,22 +477,6 @@ pub fn update_vxl() {
     }
 }
 
-pub fn set_camera(ori: &Orientation, center_x: f32, center_y: f32, focal_length: f32) {
-    unsafe {
-        c_api::setcamera(&ori.pos.to_dpoint3d(), 
-            &ori.right_vec.to_dpoint3d(), 
-            &ori.down_vec.to_dpoint3d(), 
-            &ori.forward_vec.to_dpoint3d(), 
-            center_x, center_y, focal_length);
-    }
-}
-
-pub fn opticast() {
-    unsafe {
-        c_api::opticast();
-    }
-}
-
 pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
     let mut dpos = pos.to_dpoint3d();
     unsafe {
@@ -500,29 +531,7 @@ pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
     }
 }
 
-fn in_screen(num: i32) -> bool {
-    num >= 0 && num < 600
-}
-
-pub fn draw_line_2d(x1: i32, y1: i32, x2: i32, y2: i32, col: Color) {
-    assert!(in_screen(x1), "x1 = {}", x1);
-    assert!(in_screen(x2), "x2 = {}", x2);
-    assert!(in_screen(y1), "y1 = {}", y1);
-    assert!(in_screen(y2), "y2 = {}", y2);
-    unsafe {
-        c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
-    }
-}
-
-pub fn draw_point_3d(pos: &vec3, col: Color) {
-
-    unsafe {
-        c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_i32());
-    }
-}
-
 pub fn draw_sprite(spr: &VxSprite) {
-
     unsafe {
         c_api::drawsprite(&spr.ptr);
     }
@@ -604,12 +613,6 @@ pub fn set_curcol(param: Color) {
 pub fn set_curpow(param: c_float) {
     unsafe {
         c_api::set_curpow(param);
-    }
-}
-
-pub fn set_fallcheck(param: bool) {
-    unsafe {
-        c_api::set_fallcheck(param as i32);
     }
 }
 
@@ -751,7 +754,7 @@ pub struct vspans {
 pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
     let mut spr = c_api::vx5sprite::new();
     let melted_voxel_count = unsafe {
-        c_api::meltspans(&mut spr, vspans, vspans.len() as i32, offs.as_lpoint3d())
+        c_api::meltspans(&mut spr, vspans.as_ptr(), vspans.len() as i32, offs.as_lpoint3d())
     };
     (VxSprite {
         ptr: spr,
@@ -759,9 +762,64 @@ pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
     }, melted_voxel_count)
 }
 
+pub fn get_cube(x: i32, y: i32, z: i32, ) -> Option<Color> {
+    unsafe {
+        let ptr_to_color = c_api::getcube(x, y, z) as *const i32;
+        if ptr_to_color == ptr::null() || (ptr_to_color as i32) == 1 {
+            return None;
+        }
+        return Some(Color::from_i32(*ptr_to_color));
+    }
+}
+
+pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
+    let mut palette = vec![];
+    let mut book_reviews: HashMap<i32, i32> = HashMap::new();
+
+    let path = Path::new("lorem_ipsum.vox");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `IoResult<File>`
+    let mut file = match File::create(&path) {
+        Err(why) => fail!("couldn't create {}: {}", display, why.desc),
+        Ok(file) => file,
+    };
+    file.write_le_i32(size.x);
+    file.write_le_i32(size.y);
+    file.write_le_i32(size.z);
+    for x in range(pos.x, pos.x + size.x) {
+        for y in range(pos.y, pos.y + size.y) {
+            for z in range(pos.z, pos.z + size.z) {
+                //println!("x: {}, y: {}, z: {}", x, y, z)
+                let color = get_cube(x, y, z);
+                let index = match color {
+                    None => 255,
+                    Some(c) => {
+                        let c_key = c.to_i32();
+                        if book_reviews.contains_key(&c_key) {
+                            *book_reviews.get(&c_key)
+                        } else {
+                            let index = palette.len() as i32;
+                            book_reviews.insert(c_key, index);
+                            palette.push(c_key);
+                            index
+                        }   
+                    }
+                };
+                file.write_i8(index as i8);
+            }
+        }    
+    }
+    for color in palette.iter() {
+        file.write_i8((*color&0xFF) as i8);
+        file.write_i8(( (*color>>8)&0xFF) as i8);
+        file.write_i8(( (*color>>16)&0xFF) as i8);
+    }
+}
+
 pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
     let mut spans = vec![];
-    /*for y in range(pos.y, pos.y + size.y) {
+    for y in range(pos.y, pos.y + size.y) {
         for x in range(pos.x, pos.x + size.x) {
             //for y in range(pos.y, pos.y + size.y) {
                 spans.push(c_api::vspans {
@@ -772,20 +830,20 @@ pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
                 });
             //}
         }    
-    }*/
+    }
     /*0x5 11 11 11,
 0x5 12 11 11,
 0x5 13 11 11,
 0x6 11 11 11,
 0x6 12 11 11,
 0x6 13 11 11,*/
-    spans.push(c_api::vspans {
+    /*spans.push(c_api::vspans {
                     z1: 0x5,
                     z0: 0x11,
                     x: 0x11,
                     y: 0x11
-                });
-    return meltspans(spans.as_slice(), pos);
+                });*/
+return meltspans(spans.as_slice(), pos);
 }
 
 pub fn savekv6 (filename: &str, spr: &VxSprite) {
