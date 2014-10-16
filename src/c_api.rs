@@ -1,4 +1,4 @@
-use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort, c_ulong};
+use libc::{c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_uchar, c_ushort, c_ulong};
 use std::ptr;
 
 #[repr(C)]
@@ -105,10 +105,10 @@ pub struct seqtyp {
 
 #[repr(C)]
 pub struct vspans {
-    z1: c_char,
-    z0: c_char,
-    x: c_char,
-    y: c_char,
+    pub z1: c_uchar,
+    pub z0: c_uchar,
+    pub x: c_uchar,
+    pub y: c_uchar,
 }
 
 #[repr(C)]
@@ -332,7 +332,7 @@ pub struct kfatype {
         /// lstnum: number of columns on list
         ///  offs: offset of top-left corner in VXL coordinates
         /// returns: mass (in voxel units), returns 0 if error (or no voxels)
-        pub fn meltspans (spr: &vx5sprite, lst: &vspans, lstnum: c_long, offs: &lpoint3d) -> c_long;
+        pub fn meltspans (spr: &vx5sprite, lst: &[vspans], lstnum: c_long, offs: &lpoint3d) -> c_long;
         /// -------------------------  Physics helper functions: -------------------------
         /// Math helper: The vectors are refreshed to be perpendicular to each other
         ///   and have unit length. v0 does not change orientation.

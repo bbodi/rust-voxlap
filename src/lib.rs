@@ -7,6 +7,8 @@
 
 extern crate libc;
 
+pub use c_api::vspans;
+
 use std::mem;
 use std::rand;
 use std::c_str::CString;
@@ -244,14 +246,30 @@ impl VxSprite {
             self.ptr.pos = *(vec3::from_point3d(self.ptr.pos) + *dir).as_point3d();
         }
     }
+
+    pub fn rotate(&mut self, around_angle: &vec3, w: f32) {
+        c_axis_rotate(&mut self.ptr.s, around_angle, w); 
+        c_axis_rotate(&mut self.ptr.h, around_angle, w); 
+        c_axis_rotate(&mut self.ptr.f, around_angle, w); 
+    }
+
+    pub fn scale(&mut self, scale: &vec3) {
+        self.ptr.s.x *= scale.x;
+        self.ptr.h.y *= scale.y;
+        self.ptr.f.z *= scale.z;
+    }
+
+    pub fn set_scale(&mut self, scale: &vec3) {
+        self.ptr.s.x = scale.x;
+        self.ptr.h.y = scale.y;
+        self.ptr.f.z = scale.z;
+    }
 }
 
 impl Drop for VxSprite {
     fn drop(&mut self) {
         if !self.managed_by_voxlap && self.ptr.voxnum != ptr::null_mut() {
-            println!("FREE VxSprite");
             unsafe {
-                println!("ptr: {}", self.ptr.voxnum);
                 c_api::freekv6(&*self.ptr.voxnum);
             }
         }
@@ -281,7 +299,7 @@ impl Color {
     pub fn to_i32(&self) -> i32 {
         match self {
             &RGB(r, g, b) => {
-                (r as i32 << 16) | (g as i32 << 8) | (b as i32)
+               (0x20 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
             }
         }
     }
@@ -439,6 +457,12 @@ pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
     unsafe {
         c_api::axisrotate(pos.as_mut_point3d(), axis.as_point3d(), w);
+    }
+}
+
+pub fn c_axis_rotate(pos: &mut c_api::point3d, axis: &vec3, w: f32) {
+    unsafe {
+        c_api::axisrotate(pos, axis.as_point3d(), w);
     }
 }
 
@@ -677,7 +701,6 @@ pub fn load_image(filename: &str) -> Image {
     unsafe {
         c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
     }
-    println!("bpl: {}", bpl);
     Image {
         width: xsiz,
         height: ysiz,
@@ -716,4 +739,59 @@ pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
         }
     }
     return true;
+}
+
+/*#[repr(C)]
+pub struct vspans {
+    z1: c_char,
+    z0: c_char,
+    x: c_char,
+    y: c_char,
+}*/
+pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
+    let mut spr = c_api::vx5sprite::new();
+    let melted_voxel_count = unsafe {
+        c_api::meltspans(&mut spr, vspans, vspans.len() as i32, offs.as_lpoint3d())
+    };
+    (VxSprite {
+        ptr: spr,
+        managed_by_voxlap: false,
+    }, melted_voxel_count)
+}
+
+pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
+    let mut spans = vec![];
+    /*for y in range(pos.y, pos.y + size.y) {
+        for x in range(pos.x, pos.x + size.x) {
+            //for y in range(pos.y, pos.y + size.y) {
+                spans.push(c_api::vspans {
+                    z0: pos.z as u8,
+                    z1: (pos.z + size.z) as u8,
+                    x: x as u8,
+                    y: y as u8
+                });
+            //}
+        }    
+    }*/
+    /*0x5 11 11 11,
+0x5 12 11 11,
+0x5 13 11 11,
+0x6 11 11 11,
+0x6 12 11 11,
+0x6 13 11 11,*/
+    spans.push(c_api::vspans {
+                    z1: 0x5,
+                    z0: 0x11,
+                    x: 0x11,
+                    y: 0x11
+                });
+    return meltspans(spans.as_slice(), pos);
+}
+
+pub fn savekv6 (filename: &str, spr: &VxSprite) {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    unsafe {
+        c_api::savekv6(filename_ptr, &*spr.ptr.voxnum);
+    }
 }
