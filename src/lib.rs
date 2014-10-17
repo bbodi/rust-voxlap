@@ -400,6 +400,12 @@ impl VoxlapRenderer {
     }
 }
 
+pub fn draw_line_3d (from: &vec3, to: &vec3, col: Color) {
+        unsafe {
+            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32());
+        }
+    }
+
 pub fn set_frame_buffer(dst_c_vec: CVec<u8>, pitch: i32, buffer_width: u32, buffer_height: u32) -> VoxlapRenderer {
     unsafe {
         let ptr = dst_c_vec.unwrap() as i32;
