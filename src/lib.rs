@@ -10,11 +10,11 @@ extern crate libc;
 pub use c_api::vspans;
 
 
+use std::rand::{Rng, Rand};
 use std::collections::HashMap;
 use std::io::File;
 
 use std::mem;
-use std::rand;
 use std::c_str::CString;
 use std::c_vec::CVec;
 use libc::{free, c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
@@ -83,18 +83,6 @@ impl vec3 {
         }
     }
 
-    pub fn rand() -> vec3 {
-        let mut vec = vec3::null();
-        vec.z = (rand::random::<i32>() & 32767) as f32 / 16383.5f32 - 1.0f32;
-        let mut f = (((rand::random::<i32>() & 32767)) as f32 / 16383.5f32 - 1.0f32) * std::num::Float::pi(); 
-        vec.x = f.cos(); 
-        vec.y = f.sin();
-        f = (1.0 - vec.z * vec.z).sqrt(); 
-        vec.x *= f; 
-        vec.y *= f; 
-        return vec;
-    }
-
     fn from_point3d(pos: c_api::point3d) -> vec3 {
         let mut vec = vec3::null();
         vec.x = pos.x as f32;
@@ -133,6 +121,20 @@ impl vec3 {
         self.x = pos.x as f32;
         self.y = pos.y as f32;
         self.z = pos.z as f32;
+    }
+}
+
+impl Rand for vec3 {
+    fn rand<R:Rng>(rng: &mut R) -> vec3 {
+        let mut vec = vec3::null();
+        vec.z = (rng.gen::<i32>() & 32767) as f32 / 16383.5f32 - 1.0f32;
+        let mut f = (((rng.gen::<i32>() & 32767)) as f32 / 16383.5f32 - 1.0f32) * std::num::Float::pi(); 
+        vec.x = f.cos(); 
+        vec.y = f.sin();
+        f = (1.0 - vec.z * vec.z).sqrt(); 
+        vec.x *= f; 
+        vec.y *= f; 
+        return vec;
     }
 }
 
@@ -303,20 +305,28 @@ impl Color {
     pub fn to_i32(&self) -> i32 {
         match self {
             &RGB(r, g, b) => {
-             (0x20 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
-         }
-     }
- }
+               (0x80 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
+               // std::rand::random::<i32>()%255
+           }
+       }
+   }
 
- pub fn from_i32(pixel: i32) -> Color {
-    let r: u8 = 0;
-    let g: u8 = 0;
-    let b: u8 = 0;
 
-    unsafe {
-        RGB( ((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
+    pub fn from_i32(pixel: i32) -> Color {
+        let r: u8 = 0;
+        let g: u8 = 0;
+        let b: u8 = 0;
+
+        unsafe {
+            RGB( ((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
+        }
     }
 }
+
+impl Rand for Color {
+    fn rand<R:Rng>(rng: &mut R) -> Color {
+        RGB(rng.gen_range(0, 255), rng.gen_range(0, 255), rng.gen_range(0, 255))
+    }
 }
 
 pub struct VoxlapRenderer {
@@ -509,6 +519,13 @@ pub fn set_max_scan_dist_to_max() {
     unsafe {
         //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
         c_api::setMaxScanDistToMax();
+    }
+}
+
+pub fn set_max_scan_dist(dist: i32) {
+    unsafe {
+        //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
+        c_api::setMaxScanDist(dist);
     }
 }
 
@@ -790,7 +807,6 @@ pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
     for x in range(pos.x, pos.x + size.x) {
         for y in range(pos.y, pos.y + size.y) {
             for z in range(pos.z, pos.z + size.z) {
-                //println!("x: {}, y: {}, z: {}", x, y, z)
                 let color = get_cube(x, y, z);
                 let index = match color {
                     None => 255,
@@ -800,21 +816,89 @@ pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
                             *book_reviews.get(&c_key)
                         } else {
                             let index = palette.len() as i32;
+                            if index == 255 {
+                                fail!();
+                            }
                             book_reviews.insert(c_key, index);
                             palette.push(c_key);
                             index
                         }   
                     }
                 };
-                file.write_i8(index as i8);
+                file.write_u8(index as u8);
             }
         }    
     }
-    for color in palette.iter() {
-        file.write_i8((*color&0xFF) as i8);
-        file.write_i8(( (*color>>8)&0xFF) as i8);
-        file.write_i8(( (*color>>16)&0xFF) as i8);
+    for i in range(0, 255) {
+        let color = if i < palette.len() {
+            *palette.get(i)
+        } else {
+            0
+        };
+        let r = ((color>>18) & 0xFF) as u8;
+        let g = ((color>>10) & 0xFF) as u8;
+        let b = ((color>>2) & 0xFF) as u8;
+        file.write_u8(r);
+        file.write_u8(g);
+        file.write_u8(b);
     }
+}
+
+pub fn melt_rect3(pos: &ivec3, size: &ivec3) {
+    //let mut palette = vec![];
+    //let mut book_reviews: HashMap<i32, i32> = HashMap::new();
+
+    let path = Path::new("lorem_ipsum.rawvox");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `IoResult<File>`
+    let mut file = match File::create(&path) {
+        Err(why) => fail!("couldn't create {}: {}", display, why.desc),
+        Ok(file) => file,
+    };
+    file.write_u8('X' as u8);
+    file.write_u8('R' as u8);
+    file.write_u8('A' as u8);
+    file.write_u8('W' as u8);
+    file.write_u8(0);
+    file.write_u8(4);
+    file.write_u8(8);
+    file.write_u8(8);
+    file.write_le_i32(size.x);
+    file.write_le_i32(size.y);
+    file.write_le_i32(size.z);
+    file.write_le_i32(256);
+
+    //palette.push(0);
+    //book_reviews.insert(0, 0);
+    for x in range(pos.x, pos.x + size.x) {
+        for y in range(pos.y, pos.y + size.y) {
+            for z in range(pos.z, pos.z + size.z) {
+                let color = get_cube(x, y, z);
+                let c = match color {
+                    None => 0,
+                    Some(c) => {
+                        c.to_i32()
+                    }
+                };
+                file.write_le_i32(c);
+                
+            }
+        }    
+    }
+    /*for i in range(0, 255) {
+        let color = if i < palette.len() {
+            *palette.get(i)
+        } else {
+            0
+        };
+        let r = ((color>>16) & 0xFF) as u8;
+        let g = ((color>>8) & 0xFF) as u8;
+        let b = ((color) & 0xFF) as u8;
+        //file.write_u8(r);
+        //file.write_u8(g);
+        //file.write_u8(b);
+    }*/
 }
 
 pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
@@ -851,5 +935,13 @@ pub fn savekv6 (filename: &str, spr: &VxSprite) {
     let filename_ptr = c_str.as_ptr();
     unsafe {
         c_api::savekv6(filename_ptr, &*spr.ptr.voxnum);
+    }
+}
+
+pub fn setkvx (filename: &str, pos: &ivec3, rot: i32) {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    unsafe {
+        c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
     }
 }
