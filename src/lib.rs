@@ -306,7 +306,6 @@ impl Color {
         match self {
             &RGB(r, g, b) => {
                (0x80 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
-               // std::rand::random::<i32>()%255
            }
        }
    }
@@ -354,7 +353,7 @@ pub fn uninit() {
 
 impl VoxlapRenderer {
     pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
-        assert!(self.in_screen(x+7), "x = {}", x);
+        assert!(self.in_screen_y(y+7), "y = {}", y);
         let c_str = text.to_c_str();
         let ptr = c_str.as_ptr();
         unsafe {
@@ -363,15 +362,19 @@ impl VoxlapRenderer {
         }
     }
 
-    fn in_screen(&self, num: u32) -> bool {
-        num >= 0 && num < self.screen_width
+    fn in_screen_x(&self, num: u32) -> bool {
+        num >= 0 && num < self.screen_width && num < self.screen_height
+    }
+
+    fn in_screen_y(&self, num: u32) -> bool {
+        num >= 0 && num < self.screen_height
     }
 
     pub fn draw_line_2d(&self, x1: u32, y1: u32, x2: u32, y2: u32, col: Color) {
-        assert!(self.in_screen(x1), "x1 = {}", x1);
-        assert!(self.in_screen(x2), "x2 = {}", x2);
-        assert!(self.in_screen(y1), "y1 = {}", y1);
-        assert!(self.in_screen(y2), "y2 = {}", y2);
+        assert!(self.in_screen_x(x1), "x1 = {}", x1);
+        assert!(self.in_screen_x(x2), "x2 = {}", x2);
+        assert!(self.in_screen_y(y1), "y1 = {}", y1);
+        assert!(self.in_screen_y(y2), "y2 = {}", y2);
         unsafe {
             c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
         }
@@ -683,10 +686,10 @@ pub fn melt_sphere(center: &ivec3, radius: i32) -> (VxSprite, i32) {
 
 
 pub struct Image {
-    pub width: i32,
-    pub height: i32,
-    pub bytes_per_line: i32,
-    ptr: *const i32,
+    pub width: u32,
+    pub height: u32,
+    pub bytes_per_line: u32,
+    ptr: *const u32,
 }
 
 impl Drop for Image {
@@ -699,7 +702,7 @@ impl Drop for Image {
 }
 
 impl Image {
-    pub fn get_pixel(&self, x: i32, y: i32) -> Color {
+    pub fn get_pixel(&self, x: u32, y: u32) -> Color {
         let elem_count = (self.width * self.height) as uint;
         unsafe {
             let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr, len: elem_count } );
@@ -720,9 +723,9 @@ pub fn load_image(filename: &str) -> Image {
     let c_str = filename.to_c_str();
     let filename_ptr = c_str.as_ptr();
     let mut ptr: i32 = 0;
-    let mut bpl: i32 = 0;
-    let mut xsiz: i32 = 0;
-    let mut ysiz: i32 = 0;
+    let mut bpl: u32 = 0;
+    let mut xsiz: u32 = 0;
+    let mut ysiz: u32 = 0;
 
     unsafe {
         c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
@@ -731,7 +734,7 @@ pub fn load_image(filename: &str) -> Image {
         width: xsiz,
         height: ysiz,
         bytes_per_line: bpl,
-        ptr: ptr as *const i32,
+        ptr: ptr as *const u32,
     }
 }
 
@@ -950,4 +953,72 @@ pub fn setkvx (filename: &str, pos: &ivec3, rot: i32) {
     unsafe {
         c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
     }
+}
+
+pub struct DrawTileBuilder {
+    tile_width: u32,
+    tile_height: u32,
+    screen_x: u32,
+    screen_y: u32,
+    zoom_x: u32,
+    zoom_y: u32,
+    row: u32,
+    column: u32,
+    tile_per_row: u32,
+}
+
+impl DrawTileBuilder {
+    pub fn new() -> DrawTileBuilder {
+        DrawTileBuilder {
+            tile_width: 0,
+            tile_height: 0,
+            screen_x: 0,
+            screen_y: 0,
+            zoom_x: 1,
+            zoom_y: 1,
+            row: 0,
+            column: 0,
+            tile_per_row: 0,
+        }
+    }
+
+    pub fn tile_width(mut self, param: u32) -> DrawTileBuilder {self.tile_width = param; self }
+    pub fn tile_per_row(mut self, param: u32) -> DrawTileBuilder {self.tile_per_row = param; self }
+    pub fn tile_height(mut self, param: u32) -> DrawTileBuilder {self.tile_height = param; self }
+    pub fn screen_x(mut self, param: u32) -> DrawTileBuilder {self.screen_x = param; self }
+    pub fn screen_y(mut self, param: u32) -> DrawTileBuilder {self.screen_y = param; self }
+    pub fn row(mut self, param: u32) -> DrawTileBuilder {self.row = param; self }
+    pub fn column(mut self, param: u32) -> DrawTileBuilder {self.column = param; self }
+    pub fn draw(&self, img: &Image) {
+        assert!(self.tile_per_row > 0, "tile_per_row must be > 0");
+        do_draw_tile(img, self.tile_width, self.tile_height, 
+            self.screen_x, self.screen_y, 
+            self.zoom_x, self.zoom_y,
+            self.row, self.column, self.tile_per_row);
+    }
+}
+
+pub fn draw_tile() -> DrawTileBuilder {
+    DrawTileBuilder::new()
+}
+
+fn do_draw_tile(img: &Image, tile_width: u32, tile_height: u32,
+    screen_x: u32, screen_y: u32, zoom_x: u32, zoom_y: u32, 
+    row: u32, column: u32, tile_per_row: u32) {
+    unsafe {
+        let offset_per_tile = tile_width * tile_height;
+        let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as int;
+        c_api::drawtile(img.ptr.offset(offset), img.bytes_per_line, tile_width, tile_height,
+            -screen_x<<16, -screen_y<<16, // x, y coord
+            0, 0,
+            zoom_x<<16, zoom_y<<16,
+            0, -1);
+    }
+    /*k = message[i]; if (k == '\n') { l = i+1-lp.x; break; }
+                drawtile(asci[k].f, asci[k].p,asci[k].x,asci[k].y,
+                            0,
+                            -(*(char *)asci[k].f)<<16,
+                            ((i*FONTXDIM+m)<<16)+(xres<<15),
+                            lp.y,
+                            65536,65536,0,0xffdfdf7f);*/
 }

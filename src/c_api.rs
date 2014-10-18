@@ -182,7 +182,7 @@ pub struct kfatype {
           x0: c_float, y0: c_float, x1: c_float, y1: c_float,
           x2: c_float, y2: c_float, x3: c_float, y3: c_float);
 
-        pub fn drawpolyquad (rpic: c_long, rbpl: c_long, rxsiz: c_long, rysiz: c_long,
+        pub fn drawpolyquad (rpic: c_long, rbpl: c_ulong, rxsiz: c_ulong, rysiz: c_ulong,
          x0: c_float, y0: c_float, z0: c_float, u0: c_float, v0: c_float,
          x1: c_float, y1: c_float, z1: c_float, u1: c_float, v1: c_float,
          x2: c_float, y2: c_float, z2: c_float, u2: c_float, v2: c_float,
@@ -203,8 +203,8 @@ pub struct kfatype {
         ///  xz,yz: x&y zoom, all (<<16). Use (65536,65536) for no zoom change
         /// black,white: shade scale (ARGB format). For no effects, use (0,-1)
         ///   NOTE: if alphas of black&white are same, then alpha channel ignored
-        pub fn drawtile (tf: c_long, tp: c_long, tx: c_long, ty: c_long, tcx: c_long, tcy: c_long,
-            sx: c_long, sy: c_long, xz: c_long, yz: c_long, black: c_long, white: c_long);
+        pub fn drawtile (tf: *const c_ulong, tp: c_ulong, tx: c_ulong, ty: c_ulong, tcx: c_ulong, tcy: c_ulong,
+            sx: c_ulong, sy: c_ulong, xz: c_ulong, yz: c_ulong, black: c_long, white: c_long);
 
         /// Captures a screenshot of the current frame to disk. The current frame
         ///   is defined by the last call to the voxsetframebuffer function. NOTE:
@@ -692,8 +692,8 @@ pub fn dofall (i: c_long);
         ///      bpl: pitch (bytes per line) of destination uncompressed image
         /// xsiz,ysiz: dimensions of destination image
         /// NOTE: You are responsible for calling free() on the returned pointer
-        pub fn kpzload (filnam: *const c_char, pic: *mut c_long, bpl: *mut c_long,
-          xsiz: *mut c_long, ysiz: *mut c_long);
+        pub fn kpzload (filnam: *const c_char, pic: *mut c_long, bpl: *mut c_ulong,
+          xsiz: *mut c_ulong, ysiz: *mut c_ulong);
 
         /// This retrieves the dimensions of a compressed graphic file image loaded
         ///   into memory. It supports the same file types as kpzload().
