@@ -67,13 +67,13 @@ impl vx5sprite {
     pub fn new() -> vx5sprite {
         vx5sprite {
             pos: point3d{x: 0f32, y: 0f32, z: 0f32},
-            flags: 0,
             s: point3d{x: 1f32, y: 0f32, z: 0f32},
-            voxnum: ptr::null_mut(),
             h: point3d{x: 0f32, y: 1f32, z: 0f32},
-            kfatim: 0,
             f: point3d{x: 0f32, y: 0f32, z: 1f32},
             okfatim: 0,
+            kfatim: 0,
+            voxnum: ptr::null_mut(),
+            flags: 0,
         }
     }
 }
@@ -157,7 +157,7 @@ pub struct kfatype {
         pub fn loadsky (filename: *const c_char) -> c_long;
 
         /// -------------------------  Screen related functions: -------------------------
-        pub fn voxsetframebuffer(ptr_to_dst_buffer: c_long, pitch: c_long, buffer_width: c_uint, buffer_height: c_uint);
+        pub fn voxsetframebuffer(ptr_to_dst_buffer: *mut u8, pitch: c_ulong, buffer_width: c_uint, buffer_height: c_uint);
 
         pub fn setsideshades (sto: c_char, sbo: c_char, sle: c_char, sri: c_char, sup: c_char, sdo: c_char);
 
@@ -177,8 +177,8 @@ pub struct kfatype {
 
         pub fn drawspherefill (ox: c_float, oy: c_float, oz: c_float, bakrad: c_float, col: c_long);
 
-        pub fn drawpicinquad (rpic: c_long, rbpl: c_long, rxsiz: c_long, rysiz: c_long,
-          wpic: c_long, wbpl: c_long, wxsiz: c_long, wysiz: c_long,
+        pub fn drawpicinquad (rpic: *mut u8, rbpl: c_ulong, rxsiz: c_ulong, rysiz: c_ulong,
+          wpic: *mut u8, wbpl: c_ulong, wxsiz: c_ulong, wysiz: c_ulong,
           x0: c_float, y0: c_float, x1: c_float, y1: c_float,
           x2: c_float, y2: c_float, x3: c_float, y3: c_float);
 
@@ -203,7 +203,7 @@ pub struct kfatype {
         ///  xz,yz: x&y zoom, all (<<16). Use (65536,65536) for no zoom change
         /// black,white: shade scale (ARGB format). For no effects, use (0,-1)
         ///   NOTE: if alphas of black&white are same, then alpha channel ignored
-        pub fn drawtile (tf: *const c_ulong, tp: c_ulong, tx: c_ulong, ty: c_ulong, tcx: c_ulong, tcy: c_ulong,
+        pub fn drawtile (tf: *const u8, tp: c_ulong, tx: c_ulong, ty: c_ulong, tcx: c_ulong, tcy: c_ulong,
             sx: c_ulong, sy: c_ulong, xz: c_ulong, yz: c_ulong, black: c_long, white: c_long);
 
         /// Captures a screenshot of the current frame to disk. The current frame
@@ -793,4 +793,5 @@ pub fn dofall (i: c_long);
         /// returns: 1 if file found, filnam written, continue processing
         ///         0 if no files left
         pub fn kzfindfile (filnam: *const c_char) -> c_long;
+        pub fn vox_free(ptr: *const c_void);
     }

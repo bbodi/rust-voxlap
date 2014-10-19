@@ -13,6 +13,7 @@ pub use c_api::vspans;
 use std::rand::{Rng, Rand};
 use std::collections::HashMap;
 use std::io::File;
+use std::vec::Vec;
 
 use std::mem;
 use std::c_str::CString;
@@ -37,6 +38,7 @@ impl CsgOperationType {
     }
 }
 
+#[deriving(PartialEq, Clone, Show)]
 pub enum LightingMode {
     NoSpecialLighting,
     SimpleEstimatedNormalLighting,
@@ -186,9 +188,9 @@ impl ivec3 {
 
     pub fn to_vec3(&self) -> vec3 {
         vec3 {
-            x: self.x as f32,
-            y: self.y as f32,
-            z: self.z as f32,
+            x: (self.x as f32) + 0.5f32,
+            y: (self.y as f32) + 0.5f32,
+            z: (self.z as f32) + 0.5f32,
         }
     }
 }
@@ -296,42 +298,50 @@ impl Orientation {
 }
 
 
+#[repr(C)]
 #[deriving(PartialEq, Clone, Show)]
-pub enum Color {
-    RGB(u8, u8, u8),
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 impl Color {
+    pub fn rgb(r: u8, g: u8, b: u8) -> Color {
+        Color {
+            r: r,
+            g: g,
+            b: b,
+            a: 255,
+        }
+    }
+
+    pub fn rgba(r: u8, g: u8, b: u8, a: u8) -> Color {
+        Color {
+            r: r,
+            g: g,
+            b: b,
+            a: a,
+        }
+    }
+
     pub fn to_i32(&self) -> i32 {
-        match self {
-            &RGB(r, g, b) => {
-               (0x80 << 24) | (r as i32 << 16) | (g as i32 << 8) | (b as i32)
-           }
-       }
-   }
+        (0x80 << 24) | (self.r as i32 << 16) | (self.g as i32 << 8) | (self.b as i32)
+    }
 
 
     pub fn from_i32(pixel: i32) -> Color {
-        let r: u8 = 0;
-        let g: u8 = 0;
-        let b: u8 = 0;
-
-        unsafe {
-            RGB( ((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
-        }
+        Color::rgb(((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
     }
 }
 
 impl Rand for Color {
     fn rand<R:Rng>(rng: &mut R) -> Color {
-        RGB(rng.gen_range(0, 255), rng.gen_range(0, 255), rng.gen_range(0, 255))
+        Color::rgba(rng.gen_range(0, 255), rng.gen_range(0, 255), rng.gen_range(0, 255), 0x80)
     }
 }
 
-pub struct VoxlapRenderer {
-    screen_width: u32,
-    screen_height: u32,
-}
 
 pub fn init() -> Result<(), int> {
     unsafe {
@@ -351,30 +361,105 @@ pub fn uninit() {
     }
 }
 
-impl VoxlapRenderer {
-    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
-        assert!(self.in_screen_y(y+7), "y = {}", y);
-        let c_str = text.to_c_str();
-        let ptr = c_str.as_ptr();
-        unsafe {
-            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+pub enum RenderDestinationBuffer {
+    Foreign(CVec<Color>),
+    Own(Vec<Color>),
+}
 
+pub struct RenderDestination {
+    buffer: RenderDestinationBuffer,
+    width: u32,
+    height: u32,
+    bytes_per_line: u32,
+}
+
+pub struct RenderContext<'a> {
+    render_dst: &'a mut RenderDestination
+}
+
+impl RenderDestination {
+
+    fn as_ptr(&self) -> *mut u8 {
+        unsafe {
+            match self.buffer {
+                Foreign(ref buffer) => {
+                    std::mem::transmute(buffer.get(0).unwrap())
+                },
+                Own(ref buffer) => {
+                    buffer.as_ptr() as *mut u8
+                }
+            }
         }
     }
 
     fn in_screen_x(&self, num: u32) -> bool {
-        num >= 0 && num < self.screen_width && num < self.screen_height
+        num >= 0 && num < self.width && num < self.height
     }
 
     fn in_screen_y(&self, num: u32) -> bool {
-        num >= 0 && num < self.screen_height
+        num >= 0 && num < self.height
+    }
+
+    pub fn new(buffer_width: u32, buffer_height: u32) -> RenderDestination {
+        let elem = buffer_width * buffer_height;
+        let b = std::mem::size_of::<Color>();
+        let mut buff = Vec::<Color>::with_capacity((buffer_width * buffer_height) as uint);
+        for i in range(0, buffer_width * buffer_height) {
+            buff.push(Color::rgb(0, 0, 0));
+        }
+        let dst = RenderDestination {
+            buffer: Own(buff),
+            width: buffer_width,
+            height: buffer_height,
+            bytes_per_line: buffer_width * 4,
+        };
+        
+        return dst;
+    }
+
+    pub fn from_cvec<T>(buff: CVec<T>, buffer_width: u32, buffer_height: u32, bytes_per_line: u32) -> RenderDestination {
+        unsafe {
+            let ptr = buff.unwrap() as *mut u8;
+            RenderDestination {
+                buffer: Foreign(CVec::new(ptr as *mut Color, (buffer_width * buffer_height * 4) as uint)),
+                width: buffer_width,
+                height: buffer_height,
+                bytes_per_line: bytes_per_line,
+            }
+        }
+    }
+
+    pub fn width(&self) -> u32 {self.width}
+    pub fn height(&self) -> u32 {self.height}
+
+    pub fn get(&self, x: u32, y: u32) -> Color {
+        let index = (y * self.width + x) as uint;
+        match self.buffer {
+            Foreign(ref buffer) => {
+                *buffer.get(index).unwrap()
+            },
+            Own(ref buffer) => {
+                *buffer.get(index)
+            }
+        }
+    }
+}
+
+impl<'a> RenderContext<'a> {
+    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
+        assert!(self.render_dst.in_screen_y(y+7), "y = {}", y);
+        let c_str = text.to_c_str();
+        let ptr = c_str.as_ptr();
+        unsafe {
+            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+        }
     }
 
     pub fn draw_line_2d(&self, x1: u32, y1: u32, x2: u32, y2: u32, col: Color) {
-        assert!(self.in_screen_x(x1), "x1 = {}", x1);
-        assert!(self.in_screen_x(x2), "x2 = {}", x2);
-        assert!(self.in_screen_y(y1), "y1 = {}", y1);
-        assert!(self.in_screen_y(y2), "y2 = {}", y2);
+        assert!(self.render_dst.in_screen_x(x1), "x1 = {}", x1);
+        assert!(self.render_dst.in_screen_x(x2), "x2 = {}", x2);
+        assert!(self.render_dst.in_screen_y(y1), "y1 = {}", y1);
+        assert!(self.render_dst.in_screen_y(y2), "y2 = {}", y2);
         unsafe {
             c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
         }
@@ -387,12 +472,13 @@ impl VoxlapRenderer {
     }
 
     pub fn set_camera(&self, ori: &Orientation, focal_length: f32) {
+        let ref dst = self.render_dst;
         unsafe {
             c_api::setcamera(&ori.pos.to_dpoint3d(), 
                 &ori.right_vec.to_dpoint3d(), 
                 &ori.down_vec.to_dpoint3d(), 
                 &ori.forward_vec.to_dpoint3d(), 
-                self.screen_width as f32* 0.5f32, self.screen_height as f32*0.5f32, self.screen_width as f32 * 0.5f32 * focal_length);
+                dst.width as f32* 0.5f32, dst.height as f32*0.5f32, dst.width as f32 * 0.5f32 * focal_length);
         }
     }
 
@@ -401,22 +487,33 @@ impl VoxlapRenderer {
             c_api::opticast();
         }
     }
+
+    pub fn draw_image(&self, img: &Image, x: u32, y: u32, w: u32, h: u32) {
+        let ref dst = self.render_dst;
+        unsafe {
+            c_api::drawpicinquad(
+                img.ptr, img.bytes_per_line, img.width, img.height,
+                dst.as_ptr(),  dst.bytes_per_line, dst.width, dst.height,
+                x as f32, y as f32,
+                (x + w) as f32, y as f32,
+                (x + w) as f32, (y + h) as f32,
+                x as f32, (y + h) as f32);
+        }
+    }
 }
 
 pub fn draw_line_3d (from: &vec3, to: &vec3, col: Color) {
-        unsafe {
-            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32());
-        }
-    }
-
-pub fn set_frame_buffer(dst_c_vec: CVec<u8>, pitch: i32, buffer_width: u32, buffer_height: u32) -> VoxlapRenderer {
     unsafe {
-        let ptr = dst_c_vec.unwrap() as i32;
-        c_api::voxsetframebuffer(ptr, pitch, buffer_width, buffer_height);
+        c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32());
     }
-    VoxlapRenderer {
-        screen_width: buffer_width,
-        screen_height: buffer_height
+}
+
+pub fn set_frame_buffer<'a>(render_dst: &'a mut RenderDestination) -> RenderContext<'a> {
+    unsafe {
+        c_api::voxsetframebuffer(render_dst.as_ptr(), render_dst.bytes_per_line, render_dst.width, render_dst.height);
+        RenderContext {
+            render_dst: render_dst,
+        }
     }
 }
 
@@ -526,14 +623,12 @@ pub fn z_rotate(pos: &mut vec3, w: f32) {
 
 pub fn set_max_scan_dist_to_max() {
     unsafe {
-        //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
         c_api::setMaxScanDistToMax();
     }
 }
 
 pub fn set_max_scan_dist(dist: i32) {
     unsafe {
-        //let maxscandist = (2048f64 * 1.41421356237f64) as i32;
         c_api::setMaxScanDist(dist);
     }
 }
@@ -689,14 +784,13 @@ pub struct Image {
     pub width: u32,
     pub height: u32,
     pub bytes_per_line: u32,
-    ptr: *const u32,
+    ptr: *mut u8,
 }
 
 impl Drop for Image {
     fn drop(&mut self) {
-        println!("FREE image: {}", self.ptr as i32);
         unsafe {
-            //c_api::free(self.ptr);
+            c_api::vox_free(self.ptr as *const c_void);
         }
     }
 }
@@ -705,7 +799,7 @@ impl Image {
     pub fn get_pixel(&self, x: u32, y: u32) -> Color {
         let elem_count = (self.width * self.height) as uint;
         unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr, len: elem_count } );
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
             Color::from_i32(slice[(y * self.width + x) as uint])
         }
     }
@@ -713,7 +807,7 @@ impl Image {
     pub fn pixels(&self) -> &[i32] {
         let elem_count = (self.width * self.height) as uint;
         unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr, len: elem_count } );
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
             return slice;
         }
     }
@@ -734,7 +828,7 @@ pub fn load_image(filename: &str) -> Image {
         width: xsiz,
         height: ysiz,
         bytes_per_line: bpl,
-        ptr: ptr as *const u32,
+        ptr: ptr as *mut u8,
     }
 }
 
@@ -1006,19 +1100,12 @@ fn do_draw_tile(img: &Image, tile_width: u32, tile_height: u32,
     screen_x: u32, screen_y: u32, zoom_x: u32, zoom_y: u32, 
     row: u32, column: u32, tile_per_row: u32) {
     unsafe {
-        let offset_per_tile = tile_width * tile_height;
+        let offset_per_tile = tile_width * tile_height * 4;
         let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as int;
-        c_api::drawtile(img.ptr.offset(offset), img.bytes_per_line, tile_width, tile_height,
-            -screen_x<<16, -screen_y<<16, // x, y coord
+        c_api::drawtile(img.ptr.offset(offset) as *const u8, img.bytes_per_line, tile_width, tile_height,
+            -screen_x<<16, -screen_y<<16,
             0, 0,
             zoom_x<<16, zoom_y<<16,
             0, -1);
     }
-    /*k = message[i]; if (k == '\n') { l = i+1-lp.x; break; }
-                drawtile(asci[k].f, asci[k].p,asci[k].x,asci[k].y,
-                            0,
-                            -(*(char *)asci[k].f)<<16,
-                            ((i*FONTXDIM+m)<<16)+(xres<<15),
-                            lp.y,
-                            65536,65536,0,0xffdfdf7f);*/
 }
