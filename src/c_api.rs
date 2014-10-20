@@ -32,12 +32,12 @@ pub struct dpoint3d {
 
 #[repr(C)]
 pub struct kv6data {
-    pub leng: c_long, 
-    pub xsiz: c_long, 
-    pub ysiz: c_long, 
+    pub leng: c_long,
+    pub xsiz: c_long,
+    pub ysiz: c_long,
     pub zsiz: c_long,
-    pub xpiv: c_float, 
-    pub ypiv: c_float, 
+    pub xpiv: c_float,
+    pub ypiv: c_float,
     pub zpiv: c_float,
     pub numvoxs: c_ulong,
     pub namoff: c_long,
@@ -81,7 +81,7 @@ impl vx5sprite {
 #[repr(C)]
 pub struct hingetype {
     parent: c_long,
-    p: [point3d, ..2],    
+    p: [point3d, ..2],
     v: [point3d, ..2],
     vmin: c_short,
     vmax: c_short,
@@ -295,7 +295,7 @@ pub struct kfatype {
         ///   will handle repeat/stop markers for you.
         ///    spr: .KFA sprite to animate
         /// timeadd: number of milliseconds to add to the current animation time
-        pub fn animsprite (spr: &vx5sprite, timeadd: c_long);
+        pub fn animsprite (spr: &vx5sprite, timeadd: c_ulong);
 
         /// Draw a .KV6/.KFA voxel sprite to the screen. Position & orientation are
         ///  specified in the vx5sprite structure. See VOXLAP5.H for details on the
@@ -311,7 +311,7 @@ pub struct kfatype {
         ///   hit: center of sphere
         /// hitrad: radius of sphere
         /// returns: 0:bad, >0:mass of captured object (# of voxels)
-        pub fn meltsphere (spr: &mut vx5sprite, hit: &lpoint3d, hitrad: c_long) -> c_long;
+        pub fn meltsphere (spr: &mut vx5sprite, hit: &lpoint3d, hitrad: c_ulong) -> c_ulong;
 
         /// This function is similar to meltsphere, except you can use any user-
         ///   defined shape (with some size limits). The user-defined shape is
@@ -356,7 +356,7 @@ pub struct kfatype {
          ist: &dpoint3d, ihe: &dpoint3d, ifo: &dpoint3d);
 
         pub fn axisrotate(p: &mut point3d, axis: &point3d, w: c_float);
-        
+
         /// Math helper: Spherical Linear intERPolation. Quaternions not necessary :)
         ///   Given two 3*3 orthonormal orientation matrices, this finds a 3rd
         ///      matrix that is a smooth interpolation (shortest path) between them.
@@ -453,7 +453,7 @@ pub struct kfatype {
         /// --------------------------- VXL writing functions: ---------------------------
 
         pub fn setcube(px: c_long, px: c_long, px: c_long, col: c_long);
-        pub fn setsphere(center: &lpoint3d, hitrad: c_long, dacol: c_long);
+        pub fn setsphere(center: &lpoint3d, hitrad: c_ulong, dacol: c_long);
         /// Render an ellipsoid to VXL memory (code is optimized!)
         ///   hit: focus #1
         ///  hit2: focus #2
@@ -603,7 +603,7 @@ pub struct kfatype {
 
         pub fn set_anginc(anginc: c_long);
         pub fn get_anginc() -> c_long;
-    
+
         pub fn set_fogcol(fogcol: c_long);
         pub fn set_kv6col(kv6col: c_long);
         pub fn set_curcol(curcol: c_long);
