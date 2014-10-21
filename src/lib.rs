@@ -267,10 +267,10 @@ impl VxSprite {
         self.ptr.f.z *= scale.z;
     }
 
-    pub fn set_scale(&mut self, scale: &vec3) {
-        self.ptr.s.x = scale.x;
-        self.ptr.h.y = scale.y;
-        self.ptr.f.z = scale.z;
+    pub fn set_scale(&mut self, x: f32, y: f32, z: f32) {
+        self.ptr.s.x = x;
+        self.ptr.h.y = y;
+        self.ptr.f.z = z;
     }
 
     pub fn animate(&mut self, time_add: u32) {
