@@ -278,6 +278,14 @@ impl VxSprite {
             c_api::animsprite(&self.ptr, time_add);
         }
     }
+
+    pub fn save(&self, filename: &str) {
+        unsafe {
+            let c_str = filename.to_c_str();
+            let filename_ptr = c_str.as_ptr();
+            c_api::savekv6(filename_ptr, &*self.ptr.voxnum);
+        }
+    }
 }
 
 impl Drop for VxSprite {
@@ -333,12 +341,12 @@ impl Color {
     }
 
     pub fn to_i32(&self) -> i32 {
-        (0x80 << 24) | (self.r as i32 << 16) | (self.g as i32 << 8) | (self.b as i32)
+        (self.a as i32 << 24) | (self.r as i32 << 16) | (self.g as i32 << 8) | (self.b as i32)
     }
 
 
     pub fn from_i32(pixel: i32) -> Color {
-        Color::rgb(((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8)
+        Color::rgba(((pixel >> 16) & 0xFF) as u8, ((pixel >> 8) & 0xFF) as u8, ((pixel) & 0xFF) as u8, ((pixel>>24) & 0xFF) as u8)
     }
 }
 
@@ -348,15 +356,13 @@ impl Rand for Color {
     }
 }
 
+// -------------------------  Initialization functions: -------------------------
 
-pub fn init() -> Result<(), int> {
+pub fn init() -> Result<(), ()> {
     unsafe {
-        let result = c_api::initvoxlap();
-
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(result as int)
+        match c_api::initvoxlap() {
+            0 => Ok(()),
+            _ => Err(())
         }
     }
 }
@@ -366,6 +372,66 @@ pub fn uninit() {
         c_api::uninitvoxlap();
     }
 }
+
+// --------------------------  File related functions: --------------------------
+
+pub fn load_default_map() -> Orientation {
+    unsafe {
+        let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        c_api::loadnul(&mut ipo, &mut ist, &mut ihe, &mut ifo);
+        Orientation {
+            pos: vec3::from_dpoint3d(ipo),
+            right_vec: vec3::from_dpoint3d(ist),
+            down_vec: vec3::from_dpoint3d(ihe),
+            forward_vec: vec3::from_dpoint3d(ifo)
+        }
+    }
+}
+
+pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
+    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    match unsafe {
+        c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
+    } {
+        1 => Ok(Orientation {
+            pos: vec3::from_dpoint3d(ipo),
+            right_vec: vec3::from_dpoint3d(ist),
+            down_vec: vec3::from_dpoint3d(ihe),
+            forward_vec: vec3::from_dpoint3d(ifo)
+        }),
+        _ => Err(0),
+    }
+}
+
+pub fn load_bsp(filename: &str) -> Result<Orientation, i32> {
+    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    match unsafe {
+        c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
+    } {
+        1 => Ok(Orientation {
+            pos: vec3::from_dpoint3d(ipo),
+            right_vec: vec3::from_dpoint3d(ist),
+            down_vec: vec3::from_dpoint3d(ihe),
+            forward_vec: vec3::from_dpoint3d(ifo)
+        }),
+        _ => Err(0),
+    }
+}
+
+// -------------------------  Screen related functions: -------------------------
 
 pub enum RenderDestinationBuffer {
     Foreign(CVec<Color>),
@@ -382,6 +448,40 @@ pub struct RenderDestination {
 pub struct RenderContext<'a> {
     render_dst: &'a mut RenderDestination
 }
+
+pub struct Image {
+    pub width: u32,
+    pub height: u32,
+    pub bytes_per_line: u32,
+    ptr: *mut u8,
+}
+
+impl Drop for Image {
+    fn drop(&mut self) {
+        unsafe {
+            c_api::vox_free(self.ptr as *const c_void);
+        }
+    }
+}
+
+impl Image {
+    pub fn get_pixel(&self, x: u32, y: u32) -> Color {
+        let elem_count = (self.width * self.height) as uint;
+        unsafe {
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
+            Color::from_i32(slice[(y * self.width + x) as uint])
+        }
+    }
+
+    pub fn pixels(&self) -> &[i32] {
+        let elem_count = (self.width * self.height) as uint;
+        unsafe {
+            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
+            return slice;
+        }
+    }
+}
+
 
 impl RenderDestination {
 
@@ -452,30 +552,6 @@ impl RenderDestination {
 }
 
 impl<'a> RenderContext<'a> {
-    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
-        assert!(self.render_dst.in_screen_y(y+7), "y = {}", y);
-        let c_str = text.to_c_str();
-        let ptr = c_str.as_ptr();
-        unsafe {
-            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
-        }
-    }
-
-    pub fn draw_line_2d(&self, x1: u32, y1: u32, x2: u32, y2: u32, col: Color) {
-        assert!(self.render_dst.in_screen_x(x1), "x1 = {}", x1);
-        assert!(self.render_dst.in_screen_x(x2), "x2 = {}", x2);
-        assert!(self.render_dst.in_screen_y(y1), "y1 = {}", y1);
-        assert!(self.render_dst.in_screen_y(y2), "y2 = {}", y2);
-        unsafe {
-            c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
-        }
-    }
-
-    pub fn draw_point_3d(&self, pos: &vec3, col: Color) {
-        unsafe {
-            c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_i32());
-        }
-    }
 
     pub fn set_camera(&self, ori: &Orientation, focal_length: f32) {
         let ref dst = self.render_dst;
@@ -494,31 +570,45 @@ impl<'a> RenderContext<'a> {
         }
     }
 
-    pub fn draw_image(&self, img: &Image, x: u32, y: u32, w: u32, h: u32) {
-        let ref dst = self.render_dst;
+    pub fn draw_point_2d(&self, x: u32, y: u32, col: Color) {
+        assert!(self.render_dst.in_screen_x(x), "x = {}", x);
+        assert!(self.render_dst.in_screen_y(y), "y = {}", y);
         unsafe {
-            c_api::drawpicinquad(
-                img.ptr, img.bytes_per_line, img.width, img.height,
-                dst.as_ptr(),  dst.bytes_per_line, dst.width, dst.height,
-                x as f32, y as f32,
-                (x + w) as f32, y as f32,
-                (x + w) as f32, (y + h) as f32,
-                x as f32, (y + h) as f32);
+            c_api::drawpoint2d(x, y, col.to_i32());
         }
     }
 
-
-    pub fn draw_line_3d (&self, from: &vec3, to: &vec3, col: Color) {
+    pub fn draw_point_3d(&self, pos: &vec3, col: Color) {
         unsafe {
-            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32());
+            c_api::drawpoint3d(pos.x, pos.y, pos.z, col.to_i32());
         }
     }
 
-    pub fn draw_sprite(&self, spr: &VxSprite) {
+    pub fn draw_line_2d(&self, x1: u32, y1: u32, x2: u32, y2: u32, col: Color) {
+        assert!(self.render_dst.in_screen_x(x1), "x1 = {}", x1);
+        assert!(self.render_dst.in_screen_x(x2), "x2 = {}", x2);
+        assert!(self.render_dst.in_screen_y(y1), "y1 = {}", y1);
+        assert!(self.render_dst.in_screen_y(y2), "y2 = {}", y2);
         unsafe {
-            c_api::drawsprite(&spr.ptr);
+            c_api::drawline2d(x1 as f32, y1 as f32, x2 as f32, y2 as f32, col.to_i32());
         }
     }
+
+    pub fn draw_line_3d_with_z_buffer(&self, from: &vec3, to: &vec3, col: Color) {
+        // Set alpha of col to zero to enable Z-buffering
+        unsafe {
+            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32() & 0x00FFFFFF);
+        }
+    }
+
+    pub fn draw_line_3d_without_z_buffer(&self, from: &vec3, to: &vec3, col: Color) {
+        // Set alpha of col to non-zero to disable Z-buffering
+        unsafe {
+            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32() | 0xFF000000);
+        }
+    }
+
+    // project2d
 
     pub fn draw_sphere_with_z_buffer(&self, pos: &vec3, radius: f32, col: Color) {
         unsafe {
@@ -531,6 +621,106 @@ impl<'a> RenderContext<'a> {
             c_api::drawspherefill(pos.x, pos.y, pos.z, radius, col.to_i32());
         }
     }
+
+    pub fn draw_image_2d(&self, img: &Image, x: u32, y: u32, w: u32, h: u32) {
+        let ref dst = self.render_dst;
+        unsafe {
+            c_api::drawpicinquad(
+                img.ptr, img.bytes_per_line, img.width, img.height,
+                dst.as_ptr(),  dst.bytes_per_line, dst.width, dst.height,
+                x as f32, y as f32,
+                (x + w) as f32, y as f32,
+                (x + w) as f32, (y + h) as f32,
+                x as f32, (y + h) as f32);
+        }
+    }
+
+    pub fn draw_image_3d(img: &Image, pos0: &vec3, pos1: &vec3, pos2: &vec3, pos3: &vec3) {
+        unsafe {
+            c_api::drawpolyquad(img.ptr as i32, img.bytes_per_line, img.width, img.height,
+                pos0.x, pos0.y, pos0.z, 0f32, 0f32,
+                pos1.x, pos1.y, pos1.z, 0f32, img.height as f32,
+                pos2.x, pos2.y, pos2.z, img.width as f32, img.height as f32,
+                pos3.x, pos3.y, pos3.z);
+        }
+    }
+
+    pub fn print4x6(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
+        assert!(self.render_dst.in_screen_y(y+5), "y = {}", y);
+        let c_str = text.to_c_str();
+        let ptr = c_str.as_ptr();
+        unsafe {
+            c_api::print4x6(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+        }
+    }
+
+    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
+        assert!(self.render_dst.in_screen_y(y+7), "y = {}", y);
+        let c_str = text.to_c_str();
+        let ptr = c_str.as_ptr();
+        unsafe {
+            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+        }
+    }
+
+    pub fn draw_tile(&self, img: &Image, tile_width: u32, tile_height: u32,
+        screen_x: u32, screen_y: u32, zoom_x: u32, zoom_y: u32,
+        row: u32, column: u32, tile_per_row: u32) {
+        unsafe {
+            let offset_per_tile = tile_width * tile_height * 4;
+            let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as int;
+            c_api::drawtile(img.ptr.offset(offset) as *const u8, img.bytes_per_line, tile_width, tile_height,
+                -screen_x<<16, -screen_y<<16,
+                0, 0,
+                zoom_x<<16, zoom_y<<16,
+                0, -1);
+        }
+    }
+
+    pub fn save_to_file(&self, filename: &str) {
+        unsafe {
+            let c_str = filename.to_c_str();
+            let filename_ptr = c_str.as_ptr();
+            c_api::screencapture32bit(filename_ptr);
+        }
+    }
+
+    pub fn save_panorama_to_file(&self, pos: &vec3, filename: &str, box_size: u32) {
+        unsafe {
+            let c_str = filename.to_c_str();
+            let filename_ptr = c_str.as_ptr();
+            c_api::surroundcapture32bit(&pos.to_dpoint3d(), filename_ptr, box_size);
+        }
+    }
+
+
+    pub fn draw_sprite(&self, spr: &VxSprite) {
+        unsafe {
+            c_api::drawsprite(&spr.ptr);
+        }
+    }
+}
+
+pub fn melt_sphere(center: &ivec3, radius: u32) -> (VxSprite, u32) {
+    let mut spr = c_api::vx5sprite::new();
+    let melted_voxel_count = unsafe {
+        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
+    };
+    (VxSprite {
+        ptr: spr,
+        managed_by_voxlap: false,
+    }, melted_voxel_count)
+}
+
+pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
+    let mut spr = c_api::vx5sprite::new();
+    let melted_voxel_count = unsafe {
+        c_api::meltspans(&mut spr, vspans.as_ptr(), vspans.len() as i32, offs.as_lpoint3d())
+    };
+    (VxSprite {
+        ptr: spr,
+        managed_by_voxlap: false,
+    }, melted_voxel_count)
 }
 
 pub fn set_frame_buffer<'a>(render_dst: &'a mut RenderDestination) -> RenderContext<'a> {
@@ -542,74 +732,11 @@ pub fn set_frame_buffer<'a>(render_dst: &'a mut RenderDestination) -> RenderCont
     }
 }
 
-pub fn load_default_map() -> Orientation {
-    unsafe {
-        let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        c_api::loadnul(&mut ipo, &mut ist, &mut ihe, &mut ifo);
-        Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
-        }
-    }
-}
+// -------------------------  Physics helper functions: -------------------------
 
-pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
-    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    match unsafe {
-        c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
-    } {
-        1 => Ok(Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
-        }),
-        _ => Err(0),
-    }
-}
 
-pub fn load_bsp(filename: &str) -> Result<Orientation, i32> {
-    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    match unsafe {
-        c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
-    } {
-        1 => Ok(Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
-        }),
-        _ => Err(0),
-    }
-}
+pub fn orthonormalize() {
 
-pub fn update_vxl() {
-    unsafe {
-        c_api::updatevxl();
-    }
-}
-
-pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
-    let mut dpos = pos.to_dpoint3d();
-    unsafe {
-        c_api::clipmove(&mut dpos, &move_vec.to_dpoint3d(), acr);
-    }
-    pos.fill_from_dpoint3d(dpos);
 }
 
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
@@ -629,6 +756,100 @@ pub fn z_rotate(pos: &mut vec3, w: f32) {
         let axis = c_api::point3d{ x: 0.0, y: 0.0, z: 1.0 };
         c_api::axisrotate(pos.as_mut_point3d(), &axis, w);
     }
+}
+
+pub enum VisibilityResult {
+    CanSee,
+    CannotSee(ivec3),
+}
+
+pub fn can_see(starting_point: &vec3, ending_point: &vec3) -> VisibilityResult {
+    let mut hit_pos = ivec3::new(0, 0, 0);
+    match unsafe {
+        c_api::cansee(starting_point.as_point3d(), ending_point.as_point3d(), hit_pos.as_mut_lpoint3d())
+    } {
+        1 => CanSee,
+        _ => CannotSee(hit_pos)
+    }
+}
+
+pub enum CubeFace {
+    ZMin,
+    ZMax,
+    XMin,
+    XMax,
+    YMin,
+    YMax,
+    InsideSolid
+}
+
+pub struct HitScanResult {
+    pub color: Color,
+    pub hit_face: Option<CubeFace>,
+    pub pos: ivec3,
+}
+
+pub fn hitscan(pos: &vec3, dir: &vec3) -> Option<HitScanResult> {
+    let mut voxel_pos = ivec3::new(0, 0, 0);
+    let mut face: i32 = 0;
+    unsafe {
+        let mut color_ptr: *mut i32 = ptr::null_mut();
+        c_api::hitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), voxel_pos.as_mut_lpoint3d(), &mut color_ptr, &mut face);
+        if color_ptr == ptr::null_mut() {
+            None
+        } else {
+            Some(HitScanResult {
+                color: Color::from_i32(*color_ptr),
+                hit_face: match face {
+                    0 => Some(ZMin),
+                    1 => Some(ZMax),
+                    2 => Some(XMin),
+                    3 => Some(XMax),
+                    4 => Some(YMin),
+                    5 => Some(YMax),
+                    _ => None,  // -1 if inside solid
+                },
+                pos: voxel_pos
+            })
+        }
+    }
+}
+
+pub struct SprHitScanResult {
+    //pub color: Color,
+    pub pos: ivec3,
+}
+
+pub fn sprhitscan(pos: &vec3, dir: &vec3, spr: &VxSprite, ) -> Option<SprHitScanResult> {
+    let mut voxel_pos = ivec3::new(0, 0, 0);
+    let mut unk = 10f32;
+    unsafe {
+        let mut kv6voxtype_ptr: *mut c_api::kv6voxtype = ptr::null_mut();
+        c_api::sprhitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), &spr.ptr, voxel_pos.as_mut_lpoint3d(), &mut kv6voxtype_ptr, &mut unk);
+        if kv6voxtype_ptr == ptr::null_mut() {
+            None
+        } else {
+            Some(SprHitScanResult {
+                //color: Color::from_i32(*color_ptr),
+                pos: voxel_pos
+            })
+        }
+    }
+}
+
+
+pub fn update_vxl() {
+    unsafe {
+        c_api::updatevxl();
+    }
+}
+
+pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
+    let mut dpos = pos.to_dpoint3d();
+    unsafe {
+        c_api::clipmove(&mut dpos, &move_vec.to_dpoint3d(), acr);
+    }
+    pos.fill_from_dpoint3d(dpos);
 }
 
 
@@ -752,65 +973,6 @@ pub fn get_max_xy_dimension() -> i32 {
     unsafe { c_api::getVSID() }
 }
 
-pub enum VisibilityResult {
-    CanSee,
-    CannotSee(ivec3),
-}
-
-pub fn can_see (starting_point: &vec3, ending_point: &vec3) -> VisibilityResult {
-    let mut hit_pos = ivec3::new(0, 0, 0);
-    match unsafe {
-        c_api::cansee(starting_point.as_point3d(), ending_point.as_point3d(), hit_pos.as_mut_lpoint3d())
-    } {
-        1 => CanSee,
-        _ => CannotSee(hit_pos)
-    }
-}
-
-pub fn melt_sphere(center: &ivec3, radius: u32) -> (VxSprite, u32) {
-    let mut spr = c_api::vx5sprite::new();
-    let melted_voxel_count = unsafe {
-        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
-    };
-    (VxSprite {
-        ptr: spr,
-        managed_by_voxlap: false,
-    }, melted_voxel_count)
-}
-
-
-pub struct Image {
-    pub width: u32,
-    pub height: u32,
-    pub bytes_per_line: u32,
-    ptr: *mut u8,
-}
-
-impl Drop for Image {
-    fn drop(&mut self) {
-        unsafe {
-            c_api::vox_free(self.ptr as *const c_void);
-        }
-    }
-}
-
-impl Image {
-    pub fn get_pixel(&self, x: u32, y: u32) -> Color {
-        let elem_count = (self.width * self.height) as uint;
-        unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
-            Color::from_i32(slice[(y * self.width + x) as uint])
-        }
-    }
-
-    pub fn pixels(&self) -> &[i32] {
-        let elem_count = (self.width * self.height) as uint;
-        unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
-            return slice;
-        }
-    }
-}
 
 pub fn load_image(filename: &str) -> Image {
     let c_str = filename.to_c_str();
@@ -828,16 +990,6 @@ pub fn load_image(filename: &str) -> Image {
         height: ysiz,
         bytes_per_line: bpl,
         ptr: ptr as *mut u8,
-    }
-}
-
-pub fn draw_image(img: &Image, pos0: &vec3, pos1: &vec3, pos2: &vec3, pos3: &vec3) {
-    unsafe {
-        c_api::drawpolyquad(img.ptr as i32, img.bytes_per_line, img.width, img.height,
-            pos0.x, pos0.y, pos0.z, 0f32, 0f32,
-            pos1.x, pos1.y, pos1.z, 0f32, img.height as f32,
-            pos2.x, pos2.y, pos2.z, img.width as f32, img.height as f32,
-            pos3.x, pos3.y, pos3.z);
     }
 }
 
@@ -861,24 +1013,6 @@ pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
         }
     }
     return true;
-}
-
-/*#[repr(C)]
-pub struct vspans {
-    z1: c_char,
-    z0: c_char,
-    x: c_char,
-    y: c_char,
-}*/
-pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
-    let mut spr = c_api::vx5sprite::new();
-    let melted_voxel_count = unsafe {
-        c_api::meltspans(&mut spr, vspans.as_ptr(), vspans.len() as i32, offs.as_lpoint3d())
-    };
-    (VxSprite {
-        ptr: spr,
-        managed_by_voxlap: false,
-    }, melted_voxel_count)
 }
 
 pub fn get_cube(x: i32, y: i32, z: i32, ) -> Option<Color> {
@@ -946,63 +1080,6 @@ pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
     }
 }
 
-pub fn melt_rect3(pos: &ivec3, size: &ivec3) {
-    //let mut palette = vec![];
-    //let mut book_reviews: HashMap<i32, i32> = HashMap::new();
-
-    let path = Path::new("lorem_ipsum.rawvox");
-    let display = path.display();
-
-    // Open a file in write-only mode, returns `IoResult<File>`
-    let mut file = match File::create(&path) {
-        Err(why) => fail!("couldn't create {}: {}", display, why.desc),
-        Ok(file) => file,
-    };
-    file.write_u8('X' as u8);
-    file.write_u8('R' as u8);
-    file.write_u8('A' as u8);
-    file.write_u8('W' as u8);
-    file.write_u8(0);
-    file.write_u8(4);
-    file.write_u8(8);
-    file.write_u8(8);
-    file.write_le_i32(size.x);
-    file.write_le_i32(size.y);
-    file.write_le_i32(size.z);
-    file.write_le_i32(256);
-
-    //palette.push(0);
-    //book_reviews.insert(0, 0);
-    for x in range(pos.x, pos.x + size.x) {
-        for y in range(pos.y, pos.y + size.y) {
-            for z in range(pos.z, pos.z + size.z) {
-                let color = get_cube(x, y, z);
-                let c = match color {
-                    None => 0,
-                    Some(c) => {
-                        c.to_i32()
-                    }
-                };
-                file.write_le_i32(c);
-
-            }
-        }
-    }
-    /*for i in range(0, 255) {
-        let color = if i < palette.len() {
-            *palette.get(i)
-        } else {
-            0
-        };
-        let r = ((color>>16) & 0xFF) as u8;
-        let g = ((color>>8) & 0xFF) as u8;
-        let b = ((color) & 0xFF) as u8;
-        //file.write_u8(r);
-        //file.write_u8(g);
-        //file.write_u8(b);
-    }*/
-}
-
 pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
     let mut spans = vec![];
     for y in range(pos.y, pos.y + size.y) {
@@ -1017,19 +1094,8 @@ pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
             //}
         }
     }
-    /*0x5 11 11 11,
-0x5 12 11 11,
-0x5 13 11 11,
-0x6 11 11 11,
-0x6 12 11 11,
-0x6 13 11 11,*/
-    /*spans.push(c_api::vspans {
-                    z1: 0x5,
-                    z0: 0x11,
-                    x: 0x11,
-                    y: 0x11
-                });*/
-return meltspans(spans.as_slice(), pos);
+
+    return meltspans(spans.as_slice(), pos);
 }
 
 pub fn savekv6 (filename: &str, spr: &VxSprite) {
@@ -1082,9 +1148,9 @@ impl DrawTileBuilder {
     pub fn screen_y(mut self, param: u32) -> DrawTileBuilder {self.screen_y = param; self }
     pub fn row(mut self, param: u32) -> DrawTileBuilder {self.row = param; self }
     pub fn column(mut self, param: u32) -> DrawTileBuilder {self.column = param; self }
-    pub fn draw(&self, img: &Image) {
+    pub fn draw(&self, img: &Image, render_context: &RenderContext) {
         assert!(self.tile_per_row > 0, "tile_per_row must be > 0");
-        do_draw_tile(img, self.tile_width, self.tile_height,
+        render_context.draw_tile(img, self.tile_width, self.tile_height,
             self.screen_x, self.screen_y,
             self.zoom_x, self.zoom_y,
             self.row, self.column, self.tile_per_row);
@@ -1093,18 +1159,4 @@ impl DrawTileBuilder {
 
 pub fn draw_tile() -> DrawTileBuilder {
     DrawTileBuilder::new()
-}
-
-fn do_draw_tile(img: &Image, tile_width: u32, tile_height: u32,
-    screen_x: u32, screen_y: u32, zoom_x: u32, zoom_y: u32,
-    row: u32, column: u32, tile_per_row: u32) {
-    unsafe {
-        let offset_per_tile = tile_width * tile_height * 4;
-        let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as int;
-        c_api::drawtile(img.ptr.offset(offset) as *const u8, img.bytes_per_line, tile_width, tile_height,
-            -screen_x<<16, -screen_y<<16,
-            0, 0,
-            zoom_x<<16, zoom_y<<16,
-            0, -1);
-    }
 }

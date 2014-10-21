@@ -164,7 +164,7 @@ pub struct kfatype {
         pub fn setcamera(ipo: &dpoint3d, ist: &dpoint3d, ihe: &dpoint3d, ifo: &dpoint3d, dahx: c_float, dahy: c_float, dahz: c_float);
         pub fn opticast();
 
-        pub fn drawpoint2d (sx: c_long, sy: c_long, col: c_long);
+        pub fn drawpoint2d (sx: c_ulong, sy: c_ulong, col: c_long);
 
         pub fn drawpoint3d (x0: c_float, y0: c_float, z0: c_float, col: c_long);
 
@@ -188,7 +188,7 @@ pub struct kfatype {
          x2: c_float, y2: c_float, z2: c_float, u2: c_float, v2: c_float,
          x3: c_float, y3: c_float, z3: c_float);
 
-        pub fn print4x6(x: c_long, y: c_long, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
+        pub fn print4x6(x: c_ulong, y: c_ulong, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
 
         pub fn print6x8(x: c_ulong, y: c_ulong, fg_color: c_long, bg_color: c_long, fmt: *const c_char, ...);
 
@@ -223,7 +223,7 @@ pub struct kfatype {
         /// fname: filename to write to (writes uncompressed .PNG format)
         /// boxsiz: length of side of square. I recommend using 256 or 512 for this.
         /// returns: 0:always
-        pub fn surroundcapture32bit (pos: &dpoint3d, fname: *const c_char, boxsiz: c_long) -> c_long;
+        pub fn surroundcapture32bit (pos: &dpoint3d, fname: *const c_char, boxsiz: c_ulong) -> c_long;
         /// -------------------------  Sprite related functions: -------------------------
         /// Loads a .KV6 voxel sprite into memory. It malloc's the array for you and
         ///   returns the pointer to the loaded vx5sprite. If the same filename was
@@ -385,7 +385,7 @@ pub struct kfatype {
         /// WARNING: 'h' and 'dir' are written only if a voxel is hit (remember it's
         ///   possible to shoot a ray into the sky!). To see if a voxel is hit, test
         ///   whether 'ind' is nonzero
-        pub fn hitscan (p: &dpoint3d, d: &dpoint3d, h: &lpoint3d, ind: *mut*mut c_long, dir: *mut c_long);
+        pub fn hitscan (p: &dpoint3d, d: &dpoint3d, h: &mut lpoint3d, ind: &mut *mut c_long, dir: *mut c_long);
 
         /// Similar to hitscan but for sprites. With this, you can determine exactly
         /// which voxel on a specified .KV6 sprite is hit. This is useful for .KV6
@@ -398,7 +398,7 @@ pub struct kfatype {
         /// vsc:  input: max multiple/fraction of v0's length to scan (1.0 for |v0|)
         ///     output: multiple/fraction of v0's length of hit point
         pub fn sprhitscan (p: &dpoint3d, d: &dpoint3d, spr: &vx5sprite, h: &lpoint3d,
-          ind: &kv6voxtype, vsc: *mut c_float);
+          ind: &mut *mut kv6voxtype, vsc: *mut c_float);
 
         /// Squish detection function: returns the radius of the biggest sphere that
         ///   can fit purely in air around the given point. Basically: c_float, it tells you
