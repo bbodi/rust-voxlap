@@ -431,6 +431,17 @@ pub fn load_bsp(filename: &str) -> Result<Orientation, i32> {
     }
 }
 
+pub fn load_sky(filename: &str) -> Result<(), ()> {
+    match unsafe {
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        c_api::loadsky(filename_ptr)
+    } {
+        0 => Ok(()),
+        _ => Err(()),
+    }
+}
+
 // -------------------------  Screen related functions: -------------------------
 
 pub enum RenderDestinationBuffer {
@@ -736,7 +747,7 @@ pub fn set_frame_buffer<'a>(render_dst: &'a mut RenderDestination) -> RenderCont
 
 
 pub fn orthonormalize() {
-
+ // TODO
 }
 
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
@@ -859,11 +870,163 @@ pub fn estimate_normal_vector(pos: &ivec3) -> vec3 {
     return dir;
 }
 
+// --------------------------- VXL reading functions: ---------------------------
+
+pub fn is_voxel_solid(pos: &ivec3) -> bool {
+    unsafe {
+        c_api::isvoxelsolid(pos.x, pos.y, pos.z) == 1
+    }
+}
+
+pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
+    let x_step = if start_pos.x < end_pos.x {1} else {-1};
+    let y_step = if start_pos.y < end_pos.y {1} else {-1};
+    let z_step = if start_pos.z < end_pos.z {1} else {-1};
+    for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
+        for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
+            for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
+                if is_voxel_solid(&ivec3::new(x, y, z)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+pub fn any_voxel_solid(x: u32, y: u32, z0: i32, z1: i32) -> bool {
+    unsafe {
+        c_api::anyvoxelsolid(x, y, z0, z1) != 0
+    }
+}
+
+pub fn any_voxel_empty(x: u32, y: u32, z0: i32, z1: i32) -> bool {
+    unsafe {
+        c_api::anyvoxelempty(x, y, z0, z1) != 0
+    }
+}
+
+pub fn get_floor_z(pos: &ivec3) -> i32 {
+    unsafe {
+        c_api::getfloorz(pos.x, pos.y, pos.z)
+    }
+}
+
+pub fn get_cube(x: i32, y: i32, z: i32, ) -> Option<Color> {
+    unsafe {
+        let ptr_to_color = c_api::getcube(x, y, z) as *const i32;
+        if ptr_to_color == ptr::null() || (ptr_to_color as i32) == 1 {
+            return None;
+        }
+        return Some(Color::from_i32(*ptr_to_color));
+    }
+}
+
+// --------------------------- VXL writing functions: ---------------------------
+
+pub fn set_cube(pos: &ivec3, col: Option<Color>) {
+    unsafe {
+        let col = col.map_or(-1, |c| c.to_i32());
+        c_api::setcube(pos.x, pos.y, pos.z, col);
+    }
+}
+
+pub fn set_sphere(pos: &ivec3, radius: u32, operation_type: CsgOperationType) {
+    unsafe {
+        c_api::setsphere(pos.as_lpoint3d(), radius, operation_type.as_int());
+    }
+}
+
+// setellipsoid
+// setcylinder
+pub fn set_rect(p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
+    unsafe {
+        c_api::setrect(p1.as_lpoint3d(), p2.as_lpoint3d(), mode.as_int());
+    }
+}
+// settri
+// setsector
+// setspans
+// setheightmap
+
+pub fn set_kv6_into_vxl_memory(spr: &VxSprite, operation_type: CsgOperationType) {
+    unsafe {
+        c_api::setkv6(&spr.ptr, operation_type.as_int());
+    }
+}
+
+pub fn set_kvx_into_vxl_memory (filename: &str, pos: &ivec3, rot: i32) {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    unsafe {
+        c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
+    }
+}
+
+// sethull3d
+// setlathe
+// setblobs
+// setfloodfill3d
+// sethollowfill
+pub fn set_norm_flash(pos: &vec3, flash_radius: i32, intens: i32) {
+    unsafe {
+        c_api::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
+    }
+}
+
+
+// ---------------------------- VXL MISC functions:  ----------------------------
+// updatebbox
+
 pub fn update_vxl() {
     unsafe {
         c_api::updatevxl();
     }
 }
+
+pub fn generate_vxl_mipmapping(x0: i32, y0: i32, x1: i32, y1: i32) {
+    unsafe {
+        c_api::genmipvxl(x0, y0, x1, y1);
+    }
+}
+
+pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
+    unsafe {
+        c_api::updatelighting(x0, y0, z0, x1, y1, z1);
+    }
+}
+
+// ------------------------- Falling voxels functions: --------------------------
+// TODO
+
+// ----------------------- Procedural texture functions: ------------------------
+// TODO
+
+// ---------------- Picture functions (PNG,JPG,TGA,GIF,PCX,BMP): ----------------
+
+pub fn load_image(filename: &str) -> Image {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
+    let mut ptr: i32 = 0;
+    let mut bpl: u32 = 0;
+    let mut xsiz: u32 = 0;
+    let mut ysiz: u32 = 0;
+
+    unsafe {
+        c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
+    }
+    Image {
+        width: xsiz,
+        height: ysiz,
+        bytes_per_line: bpl,
+        ptr: ptr as *mut u8,
+    }
+}
+
+// ------------------------------- ZIP functions: -------------------------------
+// TODO
+
+// -------------------------- VX5 structure variables: --------------------------
 
 pub fn set_max_scan_dist_to_max() {
     unsafe {
@@ -877,30 +1040,6 @@ pub fn set_max_scan_dist(dist: i32) {
     }
 }
 
-pub fn set_norm_flash(pos: &vec3, flash_radius: i32, intens: i32) {
-    unsafe {
-        c_api::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
-    }
-}
-
-
-pub fn set_sphere(pos: &ivec3, radius: u32, operation_type: CsgOperationType) {
-    unsafe {
-        c_api::setsphere(pos.as_lpoint3d(), radius, operation_type.as_int());
-    }
-}
-
-pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
-    unsafe {
-        c_api::updatelighting(x0, y0, z0, x1, y1, z1);
-    }
-}
-
-pub fn set_kv6_into_vxl_memory(spr: &VxSprite, operation_type: CsgOperationType) {
-    unsafe {
-        c_api::setkv6(&spr.ptr, operation_type.as_int());
-    }
-}
 
 pub fn set_lighting_mode(mode: LightingMode) {
     let m = match mode {
@@ -912,30 +1051,6 @@ pub fn set_lighting_mode(mode: LightingMode) {
         c_api::setLightingMode(m);
     }
 
-}
-
-pub fn set_rect(p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
-    unsafe {
-        c_api::setrect(p1.as_lpoint3d(), p2.as_lpoint3d(), mode.as_int());
-    }
-}
-
-pub fn set_cube(pos: &ivec3, col: Option<Color>) {
-    unsafe {
-        let col = col.map_or(-1, |c| c.to_i32());
-        c_api::setcube(pos.x, pos.y, pos.z, col);
-    }
-}
-
-pub fn load_sky(filename: &str) -> Result<(), ()> {
-    match unsafe {
-        let c_str = filename.to_c_str();
-        let filename_ptr = c_str.as_ptr();
-        c_api::loadsky(filename_ptr)
-    } {
-        0 => Ok(()),
-        _ => Err(()),
-    }
 }
 
 pub fn set_raycast_density(param: i32) {
@@ -975,67 +1090,10 @@ pub fn set_curpow(param: c_float) {
     }
 }
 
-pub fn generate_vxl_mipmapping(x0: i32, y0: i32, x1: i32, y1: i32) {
-    unsafe {
-        c_api::genmipvxl(x0, y0, x1, y1);
-    }
-}
-
 pub fn get_max_xy_dimension() -> i32 {
     unsafe { c_api::getVSID() }
 }
 
-
-pub fn load_image(filename: &str) -> Image {
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    let mut ptr: i32 = 0;
-    let mut bpl: u32 = 0;
-    let mut xsiz: u32 = 0;
-    let mut ysiz: u32 = 0;
-
-    unsafe {
-        c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
-    }
-    Image {
-        width: xsiz,
-        height: ysiz,
-        bytes_per_line: bpl,
-        ptr: ptr as *mut u8,
-    }
-}
-
-pub fn is_voxel_solid(pos: &ivec3) -> bool {
-    unsafe {
-        c_api::isvoxelsolid(pos.x, pos.y, pos.z) == 1
-    }
-}
-
-pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
-    let x_step = if start_pos.x < end_pos.x {1} else {-1};
-    let y_step = if start_pos.y < end_pos.y {1} else {-1};
-    let z_step = if start_pos.z < end_pos.z {1} else {-1};
-    for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
-        for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
-            for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
-                if is_voxel_solid(&ivec3::new(x, y, z)) {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-pub fn get_cube(x: i32, y: i32, z: i32, ) -> Option<Color> {
-    unsafe {
-        let ptr_to_color = c_api::getcube(x, y, z) as *const i32;
-        if ptr_to_color == ptr::null() || (ptr_to_color as i32) == 1 {
-            return None;
-        }
-        return Some(Color::from_i32(*ptr_to_color));
-    }
-}
 
 pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
     let mut palette = vec![];
@@ -1108,22 +1166,6 @@ pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
     }
 
     return meltspans(spans.as_slice(), pos);
-}
-
-pub fn savekv6 (filename: &str, spr: &VxSprite) {
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    unsafe {
-        c_api::savekv6(filename_ptr, &*spr.ptr.voxnum);
-    }
-}
-
-pub fn setkvx (filename: &str, pos: &ivec3, rot: i32) {
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    unsafe {
-        c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
-    }
 }
 
 pub struct DrawTileBuilder {

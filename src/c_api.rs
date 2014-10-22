@@ -436,10 +436,10 @@ pub struct kfatype {
         pub fn isvoxelsolid (x: c_long, y: c_long, z: c_long) -> c_long;
 
         /// Returns 1 if any voxels in range (x,y,z0) to (x,y,z1-1) are solid, else 0
-        pub fn anyvoxelsolid (x: c_long, y: c_long, z0: c_long, z1: c_long) -> c_long;
+        pub fn anyvoxelsolid (x: c_ulong, y: c_ulong, z0: c_long, z1: c_long) -> c_long;
 
         /// Returns 1 if any voxels in range (x,y,z0) to (x,y,z1-1) are empty, else 0
-        pub fn anyvoxelempty (x: c_long, y: c_long, z0: c_long, z1: c_long) -> c_long;
+        pub fn anyvoxelempty (x: c_ulong, y: c_ulong, z0: c_long, z1: c_long) -> c_long;
 
         /// Returns z of first solid voxel under (x,y,z). Returns z if in solid.
         pub fn getfloorz (x: c_long, y: c_long, z: c_long) -> c_long;
