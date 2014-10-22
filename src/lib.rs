@@ -822,7 +822,7 @@ pub struct SprHitScanResult {
 
 pub fn sprhitscan(pos: &vec3, dir: &vec3, spr: &VxSprite, ) -> Option<SprHitScanResult> {
     let mut voxel_pos = ivec3::new(0, 0, 0);
-    let mut unk = 10f32;
+    let mut unk = 100f32;
     unsafe {
         let mut kv6voxtype_ptr: *mut c_api::kv6voxtype = ptr::null_mut();
         c_api::sprhitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), &spr.ptr, voxel_pos.as_mut_lpoint3d(), &mut kv6voxtype_ptr, &mut unk);
@@ -837,10 +837,9 @@ pub fn sprhitscan(pos: &vec3, dir: &vec3, spr: &VxSprite, ) -> Option<SprHitScan
     }
 }
 
-
-pub fn update_vxl() {
+pub fn calc_air_radius(pos: &vec3, maxcr: f32) -> f32 {
     unsafe {
-        c_api::updatevxl();
+        c_api::findmaxcr(pos.x as f64, pos.y as f64, pos.z as f64, maxcr as f64) as f32
     }
 }
 
@@ -852,6 +851,19 @@ pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
     pos.fill_from_dpoint3d(dpos);
 }
 
+pub fn estimate_normal_vector(pos: &ivec3) -> vec3 {
+    let mut dir = vec3::new(0f32, 0f32, 0f32);
+    unsafe {
+        c_api::estnorm(pos.x, pos.y, pos.z, dir.as_mut_point3d());
+    }
+    return dir;
+}
+
+pub fn update_vxl() {
+    unsafe {
+        c_api::updatevxl();
+    }
+}
 
 pub fn set_max_scan_dist_to_max() {
     unsafe {
