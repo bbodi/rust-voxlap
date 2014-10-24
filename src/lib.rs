@@ -193,6 +193,14 @@ impl ivec3 {
             z: (self.z as f32) + 0.5f32,
         }
     }
+
+    pub fn to_point3d(&self) -> c_api::point3d {
+        c_api::point3d {
+            x: self.x as f32,
+            y: self.y as f32,
+            z: self.z as f32,
+        }
+    }
 }
 
 impl Add<ivec3, ivec3> for ivec3 {
@@ -217,13 +225,13 @@ impl Mul<i32, ivec3> for ivec3 {
     }
 }
 
-pub struct VxSprite {
+pub struct Sprite {
     ptr: c_api::vx5sprite,
     managed_by_voxlap: bool
 }
 
-impl VxSprite {
-    pub fn new(filename: &str) -> VxSprite {
+impl Sprite {
+    pub fn new(filename: &str) -> Sprite {
         let mut spr = c_api::vx5sprite::new();
         let c_str = filename.to_c_str();
         let filename_ptr = c_str.as_ptr();
@@ -231,7 +239,7 @@ impl VxSprite {
             c_api::getspr(&mut spr, filename_ptr);
         }
 
-        VxSprite {
+        Sprite {
             ptr: spr,
             managed_by_voxlap: true,
         }
@@ -288,7 +296,7 @@ impl VxSprite {
     }
 }
 
-impl Drop for VxSprite {
+impl Drop for Sprite {
     fn drop(&mut self) {
         if !self.managed_by_voxlap && self.ptr.voxnum != ptr::null_mut() {
             unsafe {
@@ -358,89 +366,521 @@ impl Rand for Color {
 
 // -------------------------  Initialization functions: -------------------------
 
-pub fn init() -> Result<(), ()> {
-    unsafe {
-        match c_api::initvoxlap() {
-            0 => Ok(()),
-            _ => Err(())
-        }
-    }
-}
+pub struct Voxlap;
 
-pub fn uninit() {
-    unsafe {
+impl Drop for Voxlap {
+    fn drop(&mut self) {
+        unsafe {
         c_api::uninitvoxlap();
     }
+    }
 }
 
-// --------------------------  File related functions: --------------------------
+impl Voxlap {
+    pub fn new() -> Result<Voxlap, ()> {
+        unsafe {
+            match c_api::initvoxlap() {
+                0 => Ok(Voxlap),
+                _ => Err(())
+            }
+        }
+    }
 
-pub fn load_default_map() -> Orientation {
-    unsafe {
+    // --------------------------  File related functions: --------------------------
+
+    pub fn load_default_map(&mut self, ) -> Orientation {
+        unsafe {
+            let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+            let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+            let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+            let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+            c_api::loadnul(&mut ipo, &mut ist, &mut ihe, &mut ifo);
+            Orientation {
+                pos: vec3::from_dpoint3d(ipo),
+                right_vec: vec3::from_dpoint3d(ist),
+                down_vec: vec3::from_dpoint3d(ihe),
+                forward_vec: vec3::from_dpoint3d(ifo)
+            }
+        }
+    }
+
+    pub fn load_vxl(&mut self, filename: &str) -> Result<Orientation, i32> {
         let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        c_api::loadnul(&mut ipo, &mut ist, &mut ihe, &mut ifo);
-        Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        match unsafe {
+            c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
+        } {
+            1 => Ok(Orientation {
+                pos: vec3::from_dpoint3d(ipo),
+                right_vec: vec3::from_dpoint3d(ist),
+                down_vec: vec3::from_dpoint3d(ihe),
+                forward_vec: vec3::from_dpoint3d(ifo)
+            }),
+            _ => Err(0),
+        }
+    }
+
+    pub fn load_bsp(&mut self, filename: &str) -> Result<Orientation, i32> {
+        let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        match unsafe {
+            c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
+        } {
+            1 => Ok(Orientation {
+                pos: vec3::from_dpoint3d(ipo),
+                right_vec: vec3::from_dpoint3d(ist),
+                down_vec: vec3::from_dpoint3d(ihe),
+                forward_vec: vec3::from_dpoint3d(ifo)
+            }),
+            _ => Err(0),
+        }
+    }
+
+    pub fn load_sky(&mut self, filename: &str) -> Result<(), ()> {
+        match unsafe {
+            let c_str = filename.to_c_str();
+            let filename_ptr = c_str.as_ptr();
+            c_api::loadsky(filename_ptr)
+        } {
+            0 => Ok(()),
+            _ => Err(()),
+        }
+    }
+
+    pub fn project_2d(&self, pos: &vec3) -> ProjecionResult {
+        let mut screen_x = 0f32;
+        let mut screen_y = 0f32;
+        let mut depth = 0f32;
+        let visible = unsafe {
+            c_api::project2d(pos.x, pos.y, pos.z, &mut screen_x, &mut screen_y, &mut depth) == 1
+        };
+        ProjecionResult {
+            screen_x: screen_x as u32,
+            screen_y: screen_y as u32,
+            depth: depth,
+            visible: visible
+        }
+    }
+
+    pub fn melt_sphere(&self, center: &ivec3, radius: u32) -> (Sprite, u32) {
+        let mut spr = c_api::vx5sprite::new();
+        let melted_voxel_count = unsafe {
+            c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
+        };
+        (Sprite {
+            ptr: spr,
+            managed_by_voxlap: false,
+        }, melted_voxel_count)
+    }
+
+    pub fn meltspans(&self, vspans: &[vspans], offs: &ivec3) -> (Sprite, i32) {
+        let mut spr = c_api::vx5sprite::new();
+        let melted_voxel_count = unsafe {
+            c_api::meltspans(&mut spr, vspans.as_ptr(), vspans.len() as i32, offs.as_lpoint3d())
+        };
+        (Sprite {
+            ptr: spr,
+            managed_by_voxlap: false,
+        }, melted_voxel_count)
+    }
+
+    pub fn set_frame_buffer<'a>(&mut self, render_dst: &'a mut RenderDestination) -> RenderContext<'a> {
+        unsafe {
+            c_api::voxsetframebuffer(render_dst.as_mut_ptr(), render_dst.bytes_per_line, render_dst.width, render_dst.height);
+            RenderContext {
+                render_dst: render_dst,
+            }
+        }
+    }
+
+
+    pub fn hitscan(&mut self, pos: &vec3, dir: &vec3) -> Option<HitScanResult> {
+        let mut voxel_pos = ivec3::new(0, 0, 0);
+        let mut face: i32 = 0;
+        unsafe {
+            let mut color_ptr: *mut i32 = ptr::null_mut();
+            c_api::hitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), voxel_pos.as_mut_lpoint3d(), &mut color_ptr, &mut face);
+            if color_ptr == ptr::null_mut() {
+                None
+            } else {
+                Some(HitScanResult {
+                    color_ptr: color_ptr,
+                    hit_face: match face {
+                        0 => Some(ZMin),
+                        1 => Some(ZMax),
+                        2 => Some(XMin),
+                        3 => Some(XMax),
+                        4 => Some(YMin),
+                        5 => Some(YMax),
+                        _ => None,  // -1 if inside solid
+                    },
+                    pos: voxel_pos,
+                })
+            }
+        }
+    }
+
+    pub fn with_hitscan(&mut self, pos: &vec3, dir: &vec3, func: |&mut Voxlap, &mut HitScanResult|) {
+        let mut voxel_pos = ivec3::new(0, 0, 0);
+        let mut face: i32 = 0;
+        unsafe {
+            let mut color_ptr: *mut i32 = ptr::null_mut();
+            c_api::hitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), voxel_pos.as_mut_lpoint3d(), &mut color_ptr, &mut face);
+            if color_ptr != ptr::null_mut() {
+                func(self, &mut HitScanResult {
+                    color_ptr: color_ptr,
+                    hit_face: match face {
+                        0 => Some(ZMin),
+                        1 => Some(ZMax),
+                        2 => Some(XMin),
+                        3 => Some(XMax),
+                        4 => Some(YMin),
+                        5 => Some(YMax),
+                        _ => None,  // -1 if inside solid
+                    },
+                    pos: voxel_pos
+                });
+            }
+        }
+    }
+
+    pub fn sprhitscan(&self, pos: &vec3, dir: &vec3, spr: &Sprite, ) -> Option<SprHitScanResult> {
+        let mut voxel_pos = ivec3::new(0, 0, 0);
+        let mut unk = 100f32;
+        unsafe {
+            let mut kv6voxtype_ptr: *mut c_api::kv6voxtype = ptr::null_mut();
+            c_api::sprhitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), &spr.ptr, voxel_pos.as_mut_lpoint3d(), &mut kv6voxtype_ptr, &mut unk);
+            if kv6voxtype_ptr == ptr::null_mut() {
+                None
+            } else {
+                Some(SprHitScanResult {
+                    //color: Color::from_i32(*color_ptr),
+                    pos: voxel_pos
+                })
+            }
+        }
+    }
+
+    pub fn calc_air_radius(&self, pos: &vec3, maxcr: f32) -> f32 {
+        unsafe {
+            c_api::findmaxcr(pos.x as f64, pos.y as f64, pos.z as f64, maxcr as f64) as f32
+        }
+    }
+
+    pub fn clip_move(&self, pos: &mut vec3, move_vec: &vec3, acr: f64) {
+        let mut dpos = pos.to_dpoint3d();
+        unsafe {
+            c_api::clipmove(&mut dpos, &move_vec.to_dpoint3d(), acr);
+        }
+        pos.fill_from_dpoint3d(dpos);
+    }
+
+    pub fn estimate_normal_vector(&self, pos: &ivec3) -> vec3 {
+        let mut dir = vec3::new(0f32, 0f32, 0f32);
+        unsafe {
+            c_api::estnorm(pos.x, pos.y, pos.z, dir.as_mut_point3d());
+        }
+        return dir;
+    }
+
+    // --------------------------- VXL reading functions: ---------------------------
+
+    pub fn is_voxel_solid(&self, pos: &ivec3) -> bool {
+        unsafe {
+            c_api::isvoxelsolid(pos.x, pos.y, pos.z) == 1
+        }
+    }
+
+    pub fn all_voxel_empty(&self, start_pos: &ivec3, end_pos: &ivec3) -> bool {
+        let x_step = if start_pos.x < end_pos.x {1} else {-1};
+        let y_step = if start_pos.y < end_pos.y {1} else {-1};
+        let z_step = if start_pos.z < end_pos.z {1} else {-1};
+        for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
+            for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
+                for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
+                    if self.is_voxel_solid(&ivec3::new(x, y, z)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    pub fn any_voxel_solid(&self, x: u32, y: u32, z0: i32, z1: i32) -> bool {
+        unsafe {
+            c_api::anyvoxelsolid(x, y, z0, z1) != 0
+        }
+    }
+
+    pub fn any_voxel_empty(&self, x: u32, y: u32, z0: i32, z1: i32) -> bool {
+        unsafe {
+            c_api::anyvoxelempty(x, y, z0, z1) != 0
+        }
+    }
+
+    pub fn get_floor_z(&self, pos: &ivec3) -> i32 {
+        unsafe {
+            c_api::getfloorz(pos.x, pos.y, pos.z)
+        }
+    }
+
+    pub fn get_cube(&self, x: i32, y: i32, z: i32, ) -> Option<Color> {
+        unsafe {
+            let ptr_to_color = c_api::getcube(x, y, z) as *const i32;
+            if ptr_to_color == ptr::null() || (ptr_to_color as i32) == 1 {
+                return None;
+            }
+            return Some(Color::from_i32(*ptr_to_color));
+        }
+    }
+
+    // --------------------------- VXL writing functions: ---------------------------
+
+    pub fn set_cube(&mut self, pos: &ivec3, col: Option<Color>) {
+        unsafe {
+            let col = col.map_or(-1, |c| c.to_i32());
+            c_api::setcube(pos.x, pos.y, pos.z, col);
+        }
+    }
+
+    pub fn set_sphere(&mut self, pos: &ivec3, radius: u32, operation_type: CsgOperationType) {
+        unsafe {
+            c_api::setsphere(pos.as_lpoint3d(), radius, operation_type.as_int());
+        }
+    }
+
+    pub fn set_elliposid(&mut self, focus_1: &ivec3, focus_2: &ivec3, radius: u32, operation_type: CsgOperationType) {
+        unsafe {
+            // 0: fast&permanent change, 1:backup (much slower: used in VOXED)
+            c_api::setellipsoid(focus_1.as_lpoint3d(), focus_2.as_lpoint3d(), radius as i32, operation_type.as_int(), 0);
+        }
+    }
+
+    pub fn set_cylinder(&mut self, end_point1: &ivec3, end_point2: &ivec3, radius: u32, operation_type: CsgOperationType) {
+        unsafe {
+            // 0: fast&permanent change, 1:backup (much slower: used in VOXED)
+            c_api::setcylinder(end_point1.as_lpoint3d(), end_point2.as_lpoint3d(), radius as i32, operation_type.as_int(), 0);
+        }
+    }
+
+    pub fn set_rect(&mut self, p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
+        unsafe {
+            c_api::setrect(p1.as_lpoint3d(), p2.as_lpoint3d(), mode.as_int());
+        }
+    }
+
+    pub fn set_triangle(&mut self, p1: &ivec3, p2: &ivec3, p3: &ivec3) {
+        unsafe {
+            // 0: fast&permanent change, 1:backup (much slower: used in VOXED)
+            c_api::settri(&p1.to_point3d(), &p2.to_point3d(), &p3.to_point3d(), 0);
+        }
+    }
+
+    pub fn set_sector(&mut self, vertices: &[ivec3], edges: &[u32], thick: f32, mode: CsgOperationType) {
+        let ivecs = vertices.iter().map(|&x| x.to_point3d()).collect::<Vec<c_api::point3d>>();
+        unsafe {
+            // 0: fast&permanent change, 1:backup (much slower: used in VOXED)
+            c_api::setsector(ivecs.as_ptr(), edges.as_ptr(), vertices.len() as u32, thick, mode.as_int(), 0);
+        }
+    }
+
+    pub fn set_spans(&self, vspans: &[vspans], offs: &ivec3, mode: CsgOperationType) {
+        unsafe {
+            c_api::setspans(vspans.as_ptr(), vspans.len() as u32, offs.as_lpoint3d(), mode.as_int());
+        }
+    }
+
+    pub fn set_heightmap(&self, buff: &[u8], width: u32, height: u32, x0: u32, y0: u32) {
+        unsafe {
+            let bytes_per_line = width;
+            c_api::setheightmap(buff.as_ptr(), bytes_per_line, width, height, x0, y0, x0+width, y0+height);
+        }
+    }
+
+    pub fn set_kv6_into_vxl_memory(&mut self, spr: &Sprite, operation_type: CsgOperationType) {
+        unsafe {
+            c_api::setkv6(&spr.ptr, operation_type.as_int());
+        }
+    }
+
+    pub fn set_kvx_into_vxl_memory (&mut self, filename: &str, pos: &ivec3, rot: i32) {
+        let c_str = filename.to_c_str();
+        let filename_ptr = c_str.as_ptr();
+        unsafe {
+            c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
+        }
+    }
+
+    // sethull3d
+    // setlathe
+    // setblobs
+    // setfloodfill3d
+    // sethollowfill
+    pub fn set_norm_flash(&mut self, pos: &vec3, flash_radius: i32, intens: i32) {
+        unsafe {
+            c_api::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
+        }
+    }
+
+
+    // ---------------------------- VXL MISC functions:  ----------------------------
+    // updatebbox
+
+    pub fn update_vxl(&mut self) {
+        unsafe {
+            c_api::updatevxl();
+        }
+    }
+
+    pub fn generate_vxl_mipmapping(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        unsafe {
+            c_api::genmipvxl(x0, y0, x1, y1);
+        }
+    }
+
+    pub fn update_lighting(&mut self, x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
+        unsafe {
+            c_api::updatelighting(x0, y0, z0, x1, y1, z1);
+        }
+    }
+
+    // ------------------------- Falling voxels functions: --------------------------
+    // TODO
+
+    // ----------------------- Procedural texture functions: ------------------------
+    // TODO
+
+    // -------------------------- VX5 structure variables: --------------------------
+
+    pub fn set_max_scan_dist_to_max(&mut self, ) {
+        unsafe {
+            c_api::setMaxScanDistToMax();
+        }
+    }
+
+    pub fn set_max_scan_dist(&mut self, dist: i32) {
+        unsafe {
+            c_api::setMaxScanDist(dist);
+        }
+    }
+
+
+    pub fn set_lighting_mode(&mut self, mode: LightingMode) {
+        let m = match mode {
+            NoSpecialLighting => 0,
+            SimpleEstimatedNormalLighting => 1,
+            MultiplePointSourceLighting => 2,
+        };
+        unsafe {
+            c_api::setLightingMode(m);
+        }
+
+    }
+
+    pub fn set_raycast_density(&mut self, param: i32) {
+        assert!(param >= 1, "Param cannot be < 0!");
+        unsafe {
+            c_api::set_anginc(param);
+        }
+    }
+
+    pub fn get_raycast_density(&self, ) -> i32 {
+        unsafe {
+            c_api::get_anginc()
+        }
+    }
+
+    pub fn set_fog_color(&mut self, param: Color) {
+        unsafe {
+            c_api::set_fogcol(param.to_i32());
+        }
+    }
+
+    pub fn set_kv6col(&mut self, param: Color) {
+        unsafe {
+            c_api::set_kv6col(param.to_i32());
+        }
+    }
+
+    pub fn set_curcol(&mut self, param: Color) {
+        unsafe {
+            c_api::set_curcol(param.to_i32());
+        }
+    }
+
+    pub fn set_curpow(&self, param: c_float) {
+        unsafe {
+            c_api::set_curpow(param);
+        }
+    }
+
+    pub fn get_max_xy_dimension(&self, ) -> i32 {
+        unsafe { c_api::getVSID() }
+    }
+
+    pub fn melt_rect(&self, pos: &ivec3, size: &ivec3) -> (Sprite, i32) {
+        let mut spans = vec![];
+        for y in range(pos.y, pos.y + size.y) {
+            for x in range(pos.x, pos.x + size.x) {
+                //for y in range(pos.y, pos.y + size.y) {
+                    spans.push(c_api::vspans {
+                        z0: pos.z as u8,
+                        z1: (pos.z + size.z) as u8,
+                        x: x as u8,
+                        y: y as u8
+                    });
+                //}
+            }
+        }
+
+        return self.meltspans(spans.as_slice(), pos);
+    }
+
+    pub fn can_see(&self, starting_point: &vec3, ending_point: &vec3) -> VisibilityResult {
+        let mut hit_pos = ivec3::new(0, 0, 0);
+        match unsafe {
+            c_api::cansee(starting_point.as_point3d(), ending_point.as_point3d(), hit_pos.as_mut_lpoint3d())
+        } {
+            1 => CanSee,
+            _ => CannotSee(hit_pos)
         }
     }
 }
 
-pub fn load_vxl(filename: &str) -> Result<Orientation, i32> {
-    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
+// ---------------- Picture functions (PNG,JPG,TGA,GIF,PCX,BMP): ----------------
+
+pub fn load_image(filename: &str) -> Image {
     let c_str = filename.to_c_str();
     let filename_ptr = c_str.as_ptr();
-    match unsafe {
-        c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
-    } {
-        1 => Ok(Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
-        }),
-        _ => Err(0),
+    let mut ptr: i32 = 0;
+    let mut bpl: u32 = 0;
+    let mut xsiz: u32 = 0;
+    let mut ysiz: u32 = 0;
+
+    unsafe {
+        c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
+    }
+    Image {
+        width: xsiz,
+        height: ysiz,
+        bytes_per_line: bpl,
+        ptr: ptr as *mut u8,
     }
 }
 
-pub fn load_bsp(filename: &str) -> Result<Orientation, i32> {
-    let mut ipo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    match unsafe {
-        c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
-    } {
-        1 => Ok(Orientation {
-            pos: vec3::from_dpoint3d(ipo),
-            right_vec: vec3::from_dpoint3d(ist),
-            down_vec: vec3::from_dpoint3d(ihe),
-            forward_vec: vec3::from_dpoint3d(ifo)
-        }),
-        _ => Err(0),
-    }
-}
+// ------------------------------- ZIP functions: -------------------------------
+// TODO
 
-pub fn load_sky(filename: &str) -> Result<(), ()> {
-    match unsafe {
-        let c_str = filename.to_c_str();
-        let filename_ptr = c_str.as_ptr();
-        c_api::loadsky(filename_ptr)
-    } {
-        0 => Ok(()),
-        _ => Err(()),
-    }
-}
+
 
 // -------------------------  Screen related functions: -------------------------
 
@@ -476,6 +916,7 @@ impl Drop for Image {
 }
 
 impl Image {
+
     pub fn get_pixel(&self, x: u32, y: u32) -> Color {
         let elem_count = (self.width * self.height) as uint;
         unsafe {
@@ -496,14 +937,27 @@ impl Image {
 
 impl RenderDestination {
 
-    fn as_ptr(&self) -> *mut u8 {
+    fn as_ptr(&self) -> *const u8 {
         unsafe {
             match self.buffer {
                 Foreign(ref buffer) => {
                     std::mem::transmute(buffer.get(0).unwrap())
                 },
                 Own(ref buffer) => {
-                    buffer.as_ptr() as *mut u8
+                    buffer.as_ptr() as *const u8
+                }
+            }
+        }
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        unsafe {
+            match self.buffer {
+                Foreign(ref buffer) => {
+                    std::mem::transmute(buffer.get(0).unwrap())
+                },
+                Own(ref mut buffer) => {
+                    buffer.as_mut_ptr() as *mut u8
                 }
             }
         }
@@ -518,8 +972,6 @@ impl RenderDestination {
     }
 
     pub fn new(buffer_width: u32, buffer_height: u32) -> RenderDestination {
-        let elem = buffer_width * buffer_height;
-        let b = std::mem::size_of::<Color>();
         let mut buff = Vec::<Color>::with_capacity((buffer_width * buffer_height) as uint);
         for i in range(0, buffer_width * buffer_height) {
             buff.push(Color::rgb(0, 0, 0));
@@ -556,7 +1008,20 @@ impl RenderDestination {
                 *buffer.get(index).unwrap()
             },
             Own(ref buffer) => {
-                *buffer.get(index)
+                buffer[index]
+            }
+        }
+    }
+
+    pub fn set(&mut self, x: u32, y: u32, col: Color) {
+        let index = (y * self.width + x) as uint;
+        match self.buffer {
+            Foreign(ref buffer) => {
+                fail!("Cannot set color for a Foreign (allocated by Voxlap) buffer");
+            },
+            Own(ref mut buffer) => {
+                (buffer.as_mut_slice())[index] = col;
+                //println!("setting {},{} to {}", x, y, col);
             }
         }
     }
@@ -619,26 +1084,24 @@ impl<'a> RenderContext<'a> {
         }
     }
 
-    // project2d
-
     pub fn draw_sphere_with_z_buffer(&self, pos: &vec3, radius: f32, col: Color) {
         unsafe {
             c_api::drawspherefill(pos.x, pos.y, pos.z, -radius, col.to_i32());
         }
     }
 
-    pub fn draw_sphere_without_z_buffer(&self, pos: &vec3, radius: f32, col: Color) {
+    pub fn draw_sphere_without_z_buffer(&mut self, pos: &vec3, radius: f32, col: Color) {
         unsafe {
             c_api::drawspherefill(pos.x, pos.y, pos.z, radius, col.to_i32());
         }
     }
 
-    pub fn draw_image_2d(&self, img: &Image, x: u32, y: u32, w: u32, h: u32) {
-        let ref dst = self.render_dst;
+    pub fn draw_image_2d(&mut self, img: &Image, x: u32, y: u32, w: u32, h: u32) {
+        let ref mut dst = self.render_dst;
         unsafe {
             c_api::drawpicinquad(
                 img.ptr, img.bytes_per_line, img.width, img.height,
-                dst.as_ptr(),  dst.bytes_per_line, dst.width, dst.height,
+                dst.as_mut_ptr(),  dst.bytes_per_line, dst.width, dst.height,
                 x as f32, y as f32,
                 (x + w) as f32, y as f32,
                 (x + w) as f32, (y + h) as f32,
@@ -665,12 +1128,16 @@ impl<'a> RenderContext<'a> {
         }
     }
 
-    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
+    pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Option<Color>, text: &str) {
         assert!(self.render_dst.in_screen_y(y+7), "y = {}", y);
         let c_str = text.to_c_str();
         let ptr = c_str.as_ptr();
+        let bg_color = match bg_color {
+            None => -1,
+            Some(c) => c.to_i32() & 0x00FFFFFF
+        };
         unsafe {
-            c_api::print6x8(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
+            c_api::print6x8(x, y, fg_color.to_i32(), bg_color, ptr);
         }
     }
 
@@ -705,50 +1172,24 @@ impl<'a> RenderContext<'a> {
     }
 
 
-    pub fn draw_sprite(&self, spr: &VxSprite) {
+    pub fn draw_sprite(&self, spr: &Sprite) {
         unsafe {
             c_api::drawsprite(&spr.ptr);
         }
     }
 }
 
-pub fn melt_sphere(center: &ivec3, radius: u32) -> (VxSprite, u32) {
-    let mut spr = c_api::vx5sprite::new();
-    let melted_voxel_count = unsafe {
-        c_api::meltsphere(&mut spr, center.as_lpoint3d(), radius)
-    };
-    (VxSprite {
-        ptr: spr,
-        managed_by_voxlap: false,
-    }, melted_voxel_count)
+pub struct ProjecionResult {
+    pub screen_x: u32,
+    pub screen_y: u32,
+    pub depth: f32,
+    pub visible: bool
 }
 
-pub fn meltspans(vspans: &[vspans], offs: &ivec3) -> (VxSprite, i32) {
-    let mut spr = c_api::vx5sprite::new();
-    let melted_voxel_count = unsafe {
-        c_api::meltspans(&mut spr, vspans.as_ptr(), vspans.len() as i32, offs.as_lpoint3d())
-    };
-    (VxSprite {
-        ptr: spr,
-        managed_by_voxlap: false,
-    }, melted_voxel_count)
-}
 
-pub fn set_frame_buffer<'a>(render_dst: &'a mut RenderDestination) -> RenderContext<'a> {
-    unsafe {
-        c_api::voxsetframebuffer(render_dst.as_ptr(), render_dst.bytes_per_line, render_dst.width, render_dst.height);
-        RenderContext {
-            render_dst: render_dst,
-        }
-    }
-}
 
 // -------------------------  Physics helper functions: -------------------------
 
-
-pub fn orthonormalize() {
- // TODO
-}
 
 pub fn axis_rotate(pos: &mut vec3, axis: &vec3, w: f32) {
     unsafe {
@@ -774,16 +1215,6 @@ pub enum VisibilityResult {
     CannotSee(ivec3),
 }
 
-pub fn can_see(starting_point: &vec3, ending_point: &vec3) -> VisibilityResult {
-    let mut hit_pos = ivec3::new(0, 0, 0);
-    match unsafe {
-        c_api::cansee(starting_point.as_point3d(), ending_point.as_point3d(), hit_pos.as_mut_lpoint3d())
-    } {
-        1 => CanSee,
-        _ => CannotSee(hit_pos)
-    }
-}
-
 pub enum CubeFace {
     ZMin,
     ZMax,
@@ -795,378 +1226,31 @@ pub enum CubeFace {
 }
 
 pub struct HitScanResult {
-    pub color: Color,
     pub hit_face: Option<CubeFace>,
     pub pos: ivec3,
+    color_ptr: *mut i32,
 }
 
-pub fn hitscan(pos: &vec3, dir: &vec3) -> Option<HitScanResult> {
-    let mut voxel_pos = ivec3::new(0, 0, 0);
-    let mut face: i32 = 0;
-    unsafe {
-        let mut color_ptr: *mut i32 = ptr::null_mut();
-        c_api::hitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), voxel_pos.as_mut_lpoint3d(), &mut color_ptr, &mut face);
-        if color_ptr == ptr::null_mut() {
-            None
-        } else {
-            Some(HitScanResult {
-                color: Color::from_i32(*color_ptr),
-                hit_face: match face {
-                    0 => Some(ZMin),
-                    1 => Some(ZMax),
-                    2 => Some(XMin),
-                    3 => Some(XMax),
-                    4 => Some(YMin),
-                    5 => Some(YMax),
-                    _ => None,  // -1 if inside solid
-                },
-                pos: voxel_pos
-            })
+impl HitScanResult {
+    pub fn set_color(&mut self, color: Color) {
+        unsafe {
+            *self.color_ptr = color.to_i32();
+        }
+    }
+
+    pub fn get_color(&self) -> Color {
+        unsafe {
+            Color::from_i32(*self.color_ptr)
         }
     }
 }
+
 
 pub struct SprHitScanResult {
     //pub color: Color,
     pub pos: ivec3,
 }
 
-pub fn sprhitscan(pos: &vec3, dir: &vec3, spr: &VxSprite, ) -> Option<SprHitScanResult> {
-    let mut voxel_pos = ivec3::new(0, 0, 0);
-    let mut unk = 100f32;
-    unsafe {
-        let mut kv6voxtype_ptr: *mut c_api::kv6voxtype = ptr::null_mut();
-        c_api::sprhitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), &spr.ptr, voxel_pos.as_mut_lpoint3d(), &mut kv6voxtype_ptr, &mut unk);
-        if kv6voxtype_ptr == ptr::null_mut() {
-            None
-        } else {
-            Some(SprHitScanResult {
-                //color: Color::from_i32(*color_ptr),
-                pos: voxel_pos
-            })
-        }
-    }
-}
-
-pub fn calc_air_radius(pos: &vec3, maxcr: f32) -> f32 {
-    unsafe {
-        c_api::findmaxcr(pos.x as f64, pos.y as f64, pos.z as f64, maxcr as f64) as f32
-    }
-}
-
-pub fn clip_move(pos: &mut vec3, move_vec: &vec3, acr: f64) {
-    let mut dpos = pos.to_dpoint3d();
-    unsafe {
-        c_api::clipmove(&mut dpos, &move_vec.to_dpoint3d(), acr);
-    }
-    pos.fill_from_dpoint3d(dpos);
-}
-
-pub fn estimate_normal_vector(pos: &ivec3) -> vec3 {
-    let mut dir = vec3::new(0f32, 0f32, 0f32);
-    unsafe {
-        c_api::estnorm(pos.x, pos.y, pos.z, dir.as_mut_point3d());
-    }
-    return dir;
-}
-
-// --------------------------- VXL reading functions: ---------------------------
-
-pub fn is_voxel_solid(pos: &ivec3) -> bool {
-    unsafe {
-        c_api::isvoxelsolid(pos.x, pos.y, pos.z) == 1
-    }
-}
-
-pub fn all_voxel_empty(start_pos: &ivec3, end_pos: &ivec3) -> bool {
-    let x_step = if start_pos.x < end_pos.x {1} else {-1};
-    let y_step = if start_pos.y < end_pos.y {1} else {-1};
-    let z_step = if start_pos.z < end_pos.z {1} else {-1};
-    for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
-        for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
-            for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
-                if is_voxel_solid(&ivec3::new(x, y, z)) {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-pub fn any_voxel_solid(x: u32, y: u32, z0: i32, z1: i32) -> bool {
-    unsafe {
-        c_api::anyvoxelsolid(x, y, z0, z1) != 0
-    }
-}
-
-pub fn any_voxel_empty(x: u32, y: u32, z0: i32, z1: i32) -> bool {
-    unsafe {
-        c_api::anyvoxelempty(x, y, z0, z1) != 0
-    }
-}
-
-pub fn get_floor_z(pos: &ivec3) -> i32 {
-    unsafe {
-        c_api::getfloorz(pos.x, pos.y, pos.z)
-    }
-}
-
-pub fn get_cube(x: i32, y: i32, z: i32, ) -> Option<Color> {
-    unsafe {
-        let ptr_to_color = c_api::getcube(x, y, z) as *const i32;
-        if ptr_to_color == ptr::null() || (ptr_to_color as i32) == 1 {
-            return None;
-        }
-        return Some(Color::from_i32(*ptr_to_color));
-    }
-}
-
-// --------------------------- VXL writing functions: ---------------------------
-
-pub fn set_cube(pos: &ivec3, col: Option<Color>) {
-    unsafe {
-        let col = col.map_or(-1, |c| c.to_i32());
-        c_api::setcube(pos.x, pos.y, pos.z, col);
-    }
-}
-
-pub fn set_sphere(pos: &ivec3, radius: u32, operation_type: CsgOperationType) {
-    unsafe {
-        c_api::setsphere(pos.as_lpoint3d(), radius, operation_type.as_int());
-    }
-}
-
-// setellipsoid
-// setcylinder
-pub fn set_rect(p1: &ivec3, p2: &ivec3, mode: CsgOperationType) {
-    unsafe {
-        c_api::setrect(p1.as_lpoint3d(), p2.as_lpoint3d(), mode.as_int());
-    }
-}
-// settri
-// setsector
-// setspans
-// setheightmap
-
-pub fn set_kv6_into_vxl_memory(spr: &VxSprite, operation_type: CsgOperationType) {
-    unsafe {
-        c_api::setkv6(&spr.ptr, operation_type.as_int());
-    }
-}
-
-pub fn set_kvx_into_vxl_memory (filename: &str, pos: &ivec3, rot: i32) {
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    unsafe {
-        c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
-    }
-}
-
-// sethull3d
-// setlathe
-// setblobs
-// setfloodfill3d
-// sethollowfill
-pub fn set_norm_flash(pos: &vec3, flash_radius: i32, intens: i32) {
-    unsafe {
-        c_api::setnormflash(pos.x, pos.y, pos.z, flash_radius, intens);
-    }
-}
-
-
-// ---------------------------- VXL MISC functions:  ----------------------------
-// updatebbox
-
-pub fn update_vxl() {
-    unsafe {
-        c_api::updatevxl();
-    }
-}
-
-pub fn generate_vxl_mipmapping(x0: i32, y0: i32, x1: i32, y1: i32) {
-    unsafe {
-        c_api::genmipvxl(x0, y0, x1, y1);
-    }
-}
-
-pub fn update_lighting(x0: i32, y0: i32, z0: i32, x1: i32, y1: i32, z1: i32) {
-    unsafe {
-        c_api::updatelighting(x0, y0, z0, x1, y1, z1);
-    }
-}
-
-// ------------------------- Falling voxels functions: --------------------------
-// TODO
-
-// ----------------------- Procedural texture functions: ------------------------
-// TODO
-
-// ---------------- Picture functions (PNG,JPG,TGA,GIF,PCX,BMP): ----------------
-
-pub fn load_image(filename: &str) -> Image {
-    let c_str = filename.to_c_str();
-    let filename_ptr = c_str.as_ptr();
-    let mut ptr: i32 = 0;
-    let mut bpl: u32 = 0;
-    let mut xsiz: u32 = 0;
-    let mut ysiz: u32 = 0;
-
-    unsafe {
-        c_api::kpzload(filename_ptr, &mut ptr, &mut bpl, &mut xsiz, &mut ysiz);
-    }
-    Image {
-        width: xsiz,
-        height: ysiz,
-        bytes_per_line: bpl,
-        ptr: ptr as *mut u8,
-    }
-}
-
-// ------------------------------- ZIP functions: -------------------------------
-// TODO
-
-// -------------------------- VX5 structure variables: --------------------------
-
-pub fn set_max_scan_dist_to_max() {
-    unsafe {
-        c_api::setMaxScanDistToMax();
-    }
-}
-
-pub fn set_max_scan_dist(dist: i32) {
-    unsafe {
-        c_api::setMaxScanDist(dist);
-    }
-}
-
-
-pub fn set_lighting_mode(mode: LightingMode) {
-    let m = match mode {
-        NoSpecialLighting => 0,
-        SimpleEstimatedNormalLighting => 1,
-        MultiplePointSourceLighting => 2,
-    };
-    unsafe {
-        c_api::setLightingMode(m);
-    }
-
-}
-
-pub fn set_raycast_density(param: i32) {
-    assert!(param >= 1, "Param cannot be < 0!");
-    unsafe {
-        c_api::set_anginc(param);
-    }
-}
-
-pub fn get_raycast_density() -> i32 {
-    unsafe {
-        c_api::get_anginc()
-    }
-}
-
-pub fn set_fog_color(param: Color) {
-    unsafe {
-        c_api::set_fogcol(param.to_i32());
-    }
-}
-
-pub fn set_kv6col(param: Color) {
-    unsafe {
-        c_api::set_kv6col(param.to_i32());
-    }
-}
-
-pub fn set_curcol(param: Color) {
-    unsafe {
-        c_api::set_curcol(param.to_i32());
-    }
-}
-
-pub fn set_curpow(param: c_float) {
-    unsafe {
-        c_api::set_curpow(param);
-    }
-}
-
-pub fn get_max_xy_dimension() -> i32 {
-    unsafe { c_api::getVSID() }
-}
-
-
-pub fn melt_rect2(pos: &ivec3, size: &ivec3) {
-    let mut palette = vec![];
-    let mut book_reviews: HashMap<i32, i32> = HashMap::new();
-
-    let path = Path::new("lorem_ipsum.vox");
-    let display = path.display();
-
-    // Open a file in write-only mode, returns `IoResult<File>`
-    let mut file = match File::create(&path) {
-        Err(why) => fail!("couldn't create {}: {}", display, why.desc),
-        Ok(file) => file,
-    };
-    file.write_le_i32(size.x);
-    file.write_le_i32(size.y);
-    file.write_le_i32(size.z);
-    for x in range(pos.x, pos.x + size.x) {
-        for y in range(pos.y, pos.y + size.y) {
-            for z in range(pos.z, pos.z + size.z) {
-                let color = get_cube(x, y, z);
-                let index = match color {
-                    None => 255,
-                    Some(c) => {
-                        let c_key = c.to_i32();
-                        if book_reviews.contains_key(&c_key) {
-                            *book_reviews.get(&c_key)
-                        } else {
-                            let index = palette.len() as i32;
-                            if index == 255 {
-                                fail!();
-                            }
-                            book_reviews.insert(c_key, index);
-                            palette.push(c_key);
-                            index
-                        }
-                    }
-                };
-                file.write_u8(index as u8);
-            }
-        }
-    }
-    for i in range(0, 255) {
-        let color = if i < palette.len() {
-            *palette.get(i)
-        } else {
-            0
-        };
-        let r = ((color>>18) & 0xFF) as u8;
-        let g = ((color>>10) & 0xFF) as u8;
-        let b = ((color>>2) & 0xFF) as u8;
-        file.write_u8(r);
-        file.write_u8(g);
-        file.write_u8(b);
-    }
-}
-
-pub fn melt_rect(pos: &ivec3, size: &ivec3) -> (VxSprite, i32) {
-    let mut spans = vec![];
-    for y in range(pos.y, pos.y + size.y) {
-        for x in range(pos.x, pos.x + size.x) {
-            //for y in range(pos.y, pos.y + size.y) {
-                spans.push(c_api::vspans {
-                    z0: pos.z as u8,
-                    z1: (pos.z + size.z) as u8,
-                    x: x as u8,
-                    y: y as u8
-                });
-            //}
-        }
-    }
-
-    return meltspans(spans.as_slice(), pos);
-}
 
 pub struct DrawTileBuilder {
     tile_width: u32,

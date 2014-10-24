@@ -173,7 +173,7 @@ pub struct kfatype {
         pub fn drawline3d (x0: c_float, y0: c_float, z0: c_float,
           x1: c_float, y1: c_float, z1: c_float, col: c_long);
 
-        pub fn project2d (x: c_float, y: c_float, z: c_float, px: *mut c_float, py: *mut c_float, sx: *mut c_float) -> c_long;
+        pub fn project2d (x: c_float, y: c_float, z: c_float, px: &mut c_float, py: &mut c_float, sx: &mut c_float) -> c_long;
 
         pub fn drawspherefill (ox: c_float, oy: c_float, oz: c_float, bakrad: c_float, col: c_long);
 
@@ -499,7 +499,7 @@ pub struct kfatype {
         /// dacol:  0: insert (additive CSG)
         ///        -1: remove (subtractive CSG)
         /// bakit: 0:fast&permanent change, 1:backup (much slower: used in VOXED)
-        pub fn setsector (p: &point3d, point2: *const c_long, n: c_long,
+        pub fn setsector (p: *const point3d, point2: *const c_ulong, n: c_ulong,
          thick: c_float, dacol: c_long, bakit: c_long);
 
         /// Do CSG using pre-sorted spanlist.
@@ -508,15 +508,15 @@ pub struct kfatype {
         ///  offs: offset in VXL map to apply CSG. This point is origin in vspans.
         /// dacol:  0: insert (additive CSG)
         ///        -1: remove (subtractive CSG)
-        pub fn setspans (lst: &vspans, lstnum: c_long, offs: &lpoint3d, dacol: c_long);
+        pub fn setspans (lst: *const vspans, lstnum: c_ulong, offs: &lpoint3d, dacol: c_long);
 
         /// Apply additive CSG using a 2D heightmap (connected to floor) as source.
         /// where: hpic: pointer to top-left corner of heightmap
         ///       hbpl: pitch (bytes per line) of heightmap
         ///    hxs,hys: dimensions of heightmap
         /// x0,y0,x1,y1: 2D box in VXL coordinates to apply additive heightmap CSG.
-        pub fn setheightmap (hptr: *const c_char, hbpl: c_long, hxs: c_long, hys: c_long,
-         x0: c_long, y0: c_long, x1: c_long, y1: c_long);
+        pub fn setheightmap (hptr: *const c_uchar, hbpl: c_ulong, hxs: c_ulong, hys: c_ulong,
+         x0: c_ulong, y0: c_ulong, x1: c_ulong, y1: c_ulong);
 
         /// Render .KV6 voxel sprite to VXL memory. Instead of drawing the sprite
         ///   to the screen, this renders it permanently to VXL memory. This can
