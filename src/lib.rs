@@ -896,7 +896,14 @@ pub fn load_image(filename: &str) -> Image {
 
 // ------------------------------- ZIP functions: -------------------------------
 // TODO
+pub fn kz_addstack (filename: &str) {
+    let c_str = filename.to_c_str();
+    let filename_ptr = c_str.as_ptr();
 
+    unsafe {
+        c_api::kzaddstack(filename_ptr);
+    }
+}
 
 
 // -------------------------  Screen related functions: -------------------------
