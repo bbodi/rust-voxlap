@@ -85,6 +85,10 @@ impl vec3 {
         }
     }
 
+    pub fn len(&self) -> f32 {
+        (self.x*self.x + self.y*self.y + self.z*self.z).sqrt()
+    }
+
     fn from_point3d(pos: c_api::point3d) -> vec3 {
         let mut vec = vec3::null();
         vec.x = pos.x as f32;
@@ -348,6 +352,16 @@ impl Color {
         }
     }
 
+    pub fn black() -> Color {Color::rgb(0, 0, 0)}
+    pub fn white() -> Color {Color::rgb(255, 255, 255)}
+    pub fn red() -> Color {Color::rgb(255, 0, 0)}
+    pub fn green() -> Color {Color::rgb(0, 255, 0)}
+    pub fn blue() -> Color {Color::rgb(0, 0, 255)}
+
+    pub fn dark_red() -> Color {Color::rgb(150, 0, 0)}
+    pub fn dark_green() -> Color {Color::rgb(0, 150, 0)}
+    pub fn dark_blue() -> Color {Color::rgb(0, 0, 150)}
+
     pub fn to_i32(&self) -> i32 {
         (self.a as i32 << 24) | (self.r as i32 << 16) | (self.g as i32 << 8) | (self.b as i32)
     }
@@ -528,13 +542,15 @@ impl Voxlap {
         }
     }
 
-    pub fn with_hitscan(&mut self, pos: &vec3, dir: &vec3, func: |&mut Voxlap, &mut HitScanResult|) {
+    pub fn with_hitscan(&mut self, pos: &vec3, dir: &vec3, func: |&mut Voxlap, &mut HitScanResult|) -> bool  {
         let mut voxel_pos = ivec3::new(0, 0, 0);
         let mut face: i32 = 0;
         unsafe {
             let mut color_ptr: *mut i32 = ptr::null_mut();
             c_api::hitscan(&pos.to_dpoint3d(), &dir.to_dpoint3d(), voxel_pos.as_mut_lpoint3d(), &mut color_ptr, &mut face);
-            if color_ptr != ptr::null_mut() {
+            if color_ptr == ptr::null_mut() {
+                return false;
+            } else {
                 func(self, &mut HitScanResult {
                     color_ptr: color_ptr,
                     hit_face: match face {
@@ -548,6 +564,7 @@ impl Voxlap {
                     },
                     pos: voxel_pos
                 });
+                return true;
             }
         }
     }
