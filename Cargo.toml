@@ -1,5 +1,15 @@
 [package]
-
 name = "voxlap"
 version = "0.0.1"
 authors = ["bbodi <bodidev@gmail.com>"]
+description = ""
+license = "MIT"
+
+[dependencies]
+c_vec = "^1.3"
+libc = "^0.2"
+num = "^0.3"
+rand = "^0.7"
+
+[lib]
+name = "voxlap"

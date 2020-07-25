@@ -9,6 +9,7 @@ pub struct lpoint3d {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct point3d {
     pub x: c_float,
     pub y: c_float,
@@ -81,12 +82,12 @@ impl vx5sprite {
 #[repr(C)]
 pub struct hingetype {
     parent: c_long,
-    p: [point3d, ..2],
-    v: [point3d, ..2],
+    p: [point3d; 2],
+    v: [point3d; 2],
     vmin: c_short,
     vmax: c_short,
     htype: c_char,
-    filler: [c_char, ..7]
+    filler: [c_char; 7]
 }
 
 #[repr(C)]

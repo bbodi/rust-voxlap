@@ -1,24 +1,29 @@
-
-#![crate_name = "voxlap"]
-#![crate_type = "lib"]
-
-#![desc = ""]
-#![license = "MIT"]
-
+extern crate c_vec;
 extern crate libc;
+extern crate num;
+extern crate rand;
 
 pub use c_api::vspans;
+use rand::distributions::Standard;
+use RenderDestinationBuffer::Foreign;
+use RenderDestinationBuffer::Own;
+use std::ffi::CString;
+use std::ops::Add;
+use std::ops::Mul;
+use std::ops::Sub;
+use VisibilityResult::CannotSee;
+use VisibilityResult::CanSee;
 
+use rand::Rng;
+use rand::distributions::Distribution;
 
-use std::rand::{Rng, Rand};
-use std::collections::HashMap;
-use std::io::File;
 use std::vec::Vec;
+use c_vec::CVec;
+use num::range_step_inclusive;
 
 use std::mem;
-use std::c_str::CString;
-use std::c_vec::CVec;
-use libc::{free, c_long, c_int, c_char, c_float, c_double, c_void, c_short, c_ushort};
+
+use libc::{c_float, c_void};
 use std::ptr;
 
 mod c_api;
@@ -38,14 +43,15 @@ impl CsgOperationType {
     }
 }
 
-#[deriving(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum LightingMode {
     NoSpecialLighting,
     SimpleEstimatedNormalLighting,
     MultiplePointSourceLighting
 }
 
-#[deriving(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Copy, Debug)]
+#[allow(non_camel_case_types)]
 pub struct vec3 {
     pub x: f32,
     pub y: f32,
@@ -130,11 +136,11 @@ impl vec3 {
     }
 }
 
-impl Rand for vec3 {
-    fn rand<R:Rng>(rng: &mut R) -> vec3 {
+impl Distribution<vec3> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> vec3 {
         let mut vec = vec3::null();
         vec.z = (rng.gen::<i32>() & 32767) as f32 / 16383.5f32 - 1.0f32;
-        let mut f = (((rng.gen::<i32>() & 32767)) as f32 / 16383.5f32 - 1.0f32) * std::num::Float::pi();
+        let mut f = (((rng.gen::<i32>() & 32767)) as f32 / 16383.5f32 - 1.0f32) * std::f32::consts::PI;
         vec.x = f.cos();
         vec.y = f.sin();
         f = (1.0 - vec.z * vec.z).sqrt();
@@ -144,29 +150,36 @@ impl Rand for vec3 {
     }
 }
 
-impl Add<vec3, vec3> for vec3 {
-    fn add(&self, rhs: &vec3) -> vec3 {
-        vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+impl Add for vec3 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
     }
 }
 
-impl Sub<vec3, vec3> for vec3 {
-    fn sub(&self, rhs: &vec3) -> vec3 {
-        vec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+impl Sub for vec3 {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self {
+        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
     }
 }
 
-impl Mul<f32, vec3> for vec3 {
-    fn mul(&self, f: &f32) -> vec3 {
-        vec3 {
-            x: self.x * *f,
-            y: self.y * *f,
-            z: self.z * *f
+impl Mul<f32> for vec3 {
+    type Output = Self;
+
+    fn mul(self, f: f32) -> Self {
+        Self {
+            x: self.x * f,
+            y: self.y * f,
+            z: self.z * f
         }
     }
 }
 
-#[deriving(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Copy, Debug)]
+#[allow(non_camel_case_types)]
 pub struct ivec3 {
     pub x: i32,
     pub y: i32,
@@ -207,24 +220,30 @@ impl ivec3 {
     }
 }
 
-impl Add<ivec3, ivec3> for ivec3 {
-    fn add(&self, rhs: &ivec3) -> ivec3 {
-        ivec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+impl Add for ivec3 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
     }
 }
 
-impl Sub<ivec3, ivec3> for ivec3 {
-    fn sub(&self, rhs: &ivec3) -> ivec3 {
-        ivec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+impl Sub for ivec3 {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self {
+        Self::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
     }
 }
 
-impl Mul<i32, ivec3> for ivec3 {
-    fn mul(&self, f: &i32) -> ivec3 {
-        ivec3 {
-            x: self.x * *f,
-            y: self.y * *f,
-            z: self.z * *f
+impl Mul<i32> for ivec3 {
+    type Output = Self;
+
+    fn mul(self, f: i32) -> Self {
+        Self {
+            x: self.x * f,
+            y: self.y * f,
+            z: self.z * f
         }
     }
 }
@@ -237,7 +256,7 @@ pub struct Sprite {
 impl Sprite {
     pub fn new(filename: &str) -> Sprite {
         let mut spr = c_api::vx5sprite::new();
-        let c_str = filename.to_c_str();
+        let c_str = CString::new(filename).expect("CString::new failed");
         let filename_ptr = c_str.as_ptr();
         unsafe {
             c_api::getspr(&mut spr, filename_ptr);
@@ -293,7 +312,7 @@ impl Sprite {
 
     pub fn save(&self, filename: &str) {
         unsafe {
-            let c_str = filename.to_c_str();
+            let c_str = CString::new(filename).expect("CString::new failed");
             let filename_ptr = c_str.as_ptr();
             c_api::savekv6(filename_ptr, &*self.ptr.voxnum);
         }
@@ -311,7 +330,7 @@ impl Drop for Sprite {
 }
 
 
-#[deriving(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct Orientation {
     pub pos: vec3,
     pub right_vec: vec3,
@@ -325,7 +344,7 @@ impl Orientation {
 
 
 #[repr(C)]
-#[deriving(PartialEq, Clone, Show)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -363,7 +382,7 @@ impl Color {
     pub fn dark_blue() -> Color {Color::rgb(0, 0, 150)}
 
     pub fn to_i32(&self) -> i32 {
-        (self.a as i32 << 24) | (self.r as i32 << 16) | (self.g as i32 << 8) | (self.b as i32)
+        ((self.a as i32) << 24) | ((self.r as i32) << 16) | ((self.g as i32) << 8) | (self.b as i32)
     }
 
 
@@ -372,8 +391,8 @@ impl Color {
     }
 }
 
-impl Rand for Color {
-    fn rand<R:Rng>(rng: &mut R) -> Color {
+impl Distribution<Color> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Color {
         Color::rgba(rng.gen_range(0, 255), rng.gen_range(0, 255), rng.gen_range(0, 255), 0x80)
     }
 }
@@ -423,7 +442,7 @@ impl Voxlap {
         let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        let c_str = filename.to_c_str();
+        let c_str = CString::new(filename).expect("CString::new failed");
         let filename_ptr = c_str.as_ptr();
         match unsafe {
             c_api::loadvxl(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
@@ -443,7 +462,7 @@ impl Voxlap {
         let mut ist = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ihe = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
         let mut ifo = c_api::dpoint3d { x: 0.0, y: 0.0, z: 0.0};
-        let c_str = filename.to_c_str();
+        let c_str = CString::new(filename).expect("CString::new failed");
         let filename_ptr = c_str.as_ptr();
         match unsafe {
             c_api::loadbsp(filename_ptr, &mut ipo, &mut ist, &mut ihe, &mut ifo)
@@ -460,7 +479,7 @@ impl Voxlap {
 
     pub fn load_sky(&mut self, filename: &str) -> Result<(), ()> {
         match unsafe {
-            let c_str = filename.to_c_str();
+            let c_str = CString::new(filename).expect("CString::new failed");
             let filename_ptr = c_str.as_ptr();
             c_api::loadsky(filename_ptr)
         } {
@@ -528,12 +547,12 @@ impl Voxlap {
                 Some(HitScanResult {
                     color_ptr: color_ptr,
                     hit_face: match face {
-                        0 => Some(ZMin),
-                        1 => Some(ZMax),
-                        2 => Some(XMin),
-                        3 => Some(XMax),
-                        4 => Some(YMin),
-                        5 => Some(YMax),
+                        0 => Some(CubeFace::ZMin),
+                        1 => Some(CubeFace::ZMax),
+                        2 => Some(CubeFace::XMin),
+                        3 => Some(CubeFace::XMax),
+                        4 => Some(CubeFace::YMin),
+                        5 => Some(CubeFace::YMax),
                         _ => None,  // -1 if inside solid
                     },
                     pos: voxel_pos,
@@ -542,7 +561,8 @@ impl Voxlap {
         }
     }
 
-    pub fn with_hitscan(&mut self, pos: &vec3, dir: &vec3, func: |&mut Voxlap, &mut HitScanResult|) -> bool  {
+    pub fn with_hitscan<F>(&mut self, pos: &vec3, dir: &vec3, func: F) -> bool  
+        where F : Fn(&mut Voxlap, &mut HitScanResult) {
         let mut voxel_pos = ivec3::new(0, 0, 0);
         let mut face: i32 = 0;
         unsafe {
@@ -554,12 +574,12 @@ impl Voxlap {
                 func(self, &mut HitScanResult {
                     color_ptr: color_ptr,
                     hit_face: match face {
-                        0 => Some(ZMin),
-                        1 => Some(ZMax),
-                        2 => Some(XMin),
-                        3 => Some(XMax),
-                        4 => Some(YMin),
-                        5 => Some(YMax),
+                        0 => Some(CubeFace::ZMin),
+                        1 => Some(CubeFace::ZMax),
+                        2 => Some(CubeFace::XMin),
+                        3 => Some(CubeFace::XMax),
+                        4 => Some(CubeFace::YMin),
+                        5 => Some(CubeFace::YMax),
                         _ => None,  // -1 if inside solid
                     },
                     pos: voxel_pos
@@ -620,9 +640,9 @@ impl Voxlap {
         let x_step = if start_pos.x < end_pos.x {1} else {-1};
         let y_step = if start_pos.y < end_pos.y {1} else {-1};
         let z_step = if start_pos.z < end_pos.z {1} else {-1};
-        for x in std::iter::range_step_inclusive(start_pos.x, end_pos.x, x_step) {
-            for y in std::iter::range_step_inclusive(start_pos.y, end_pos.y, y_step) {
-                for z in std::iter::range_step_inclusive(start_pos.z, end_pos.z, z_step) {
+        for x in range_step_inclusive(start_pos.x, end_pos.x, x_step) {
+            for y in range_step_inclusive(start_pos.y, end_pos.y, y_step) {
+                for z in range_step_inclusive(start_pos.z, end_pos.z, z_step) {
                     if self.is_voxel_solid(&ivec3::new(x, y, z)) {
                         return false;
                     }
@@ -730,7 +750,7 @@ impl Voxlap {
     }
 
     pub fn set_kvx_into_vxl_memory (&mut self, filename: &str, pos: &ivec3, rot: i32) {
-        let c_str = filename.to_c_str();
+        let c_str = CString::new(filename).expect("CString::new failed");
         let filename_ptr = c_str.as_ptr();
         unsafe {
             c_api::setkvx(filename_ptr, pos.x, pos.y, pos.z, rot, 0);
@@ -846,9 +866,9 @@ impl Voxlap {
 
     pub fn melt_rect(&self, pos: &ivec3, size: &ivec3) -> (Sprite, i32) {
         let mut spans = vec![];
-        for y in range(pos.y, pos.y + size.y) {
-            for x in range(pos.x, pos.x + size.x) {
-                //for y in range(pos.y, pos.y + size.y) {
+        for y in pos.y .. pos.y + size.y {
+            for x in pos.x .. pos.x + size.x {
+                //for y in pos.y .. pos.y + size.y {
                     spans.push(c_api::vspans {
                         z0: pos.z as u8,
                         z1: (pos.z + size.z) as u8,
@@ -876,7 +896,7 @@ impl Voxlap {
 // ---------------- Picture functions (PNG,JPG,TGA,GIF,PCX,BMP): ----------------
 
 pub fn load_image(filename: &str) -> Image {
-    let c_str = filename.to_c_str();
+    let c_str = CString::new(filename).expect("CString::new failed");
     let filename_ptr = c_str.as_ptr();
     let mut ptr: i32 = 0;
     let mut bpl: u32 = 0;
@@ -897,7 +917,7 @@ pub fn load_image(filename: &str) -> Image {
 // ------------------------------- ZIP functions: -------------------------------
 // TODO
 pub fn kz_addstack (filename: &str) {
-    let c_str = filename.to_c_str();
+    let c_str = CString::new(filename).expect("CString::new failed");
     let filename_ptr = c_str.as_ptr();
 
     unsafe {
@@ -942,17 +962,17 @@ impl Drop for Image {
 impl Image {
 
     pub fn get_pixel(&self, x: u32, y: u32) -> Color {
-        let elem_count = (self.width * self.height) as uint;
+        let elem_count = (self.width * self.height) as u32; 
         unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
-            Color::from_i32(slice[(y * self.width + x) as uint])
+            let slice: &[i32] = std::slice::from_raw_parts(self.ptr as *const i32, elem_count as usize);
+            Color::from_i32(slice[(y * self.width + x) as usize])
         }
     }
 
     pub fn pixels(&self) -> &[i32] {
-        let elem_count = (self.width * self.height) as uint;
+        let elem_count = (self.width * self.height) as u32;
         unsafe {
-            let slice: &[i32] = mem::transmute( std::raw::Slice { data: self.ptr as *const u8, len: elem_count } );
+            let slice: &[i32] = std::slice::from_raw_parts(self.ptr as *const i32, elem_count as usize);
             return slice;
         }
     }
@@ -996,8 +1016,8 @@ impl RenderDestination {
     }
 
     pub fn new(buffer_width: u32, buffer_height: u32) -> RenderDestination {
-        let mut buff = Vec::<Color>::with_capacity((buffer_width * buffer_height) as uint);
-        for i in range(0, buffer_width * buffer_height) {
+        let mut buff = Vec::<Color>::with_capacity((buffer_width * buffer_height) as usize);
+        for i in 0 .. buffer_width * buffer_height {
             buff.push(Color::rgb(0, 0, 0));
         }
         let dst = RenderDestination {
@@ -1012,9 +1032,9 @@ impl RenderDestination {
 
     pub fn from_cvec<T>(buff: CVec<T>, buffer_width: u32, buffer_height: u32, bytes_per_line: u32) -> RenderDestination {
         unsafe {
-            let ptr = buff.unwrap() as *mut u8;
+            let ptr = buff.into_inner() as *mut u8;
             RenderDestination {
-                buffer: Foreign(CVec::new(ptr as *mut Color, (buffer_width * buffer_height * 4) as uint)),
+                buffer: Foreign(CVec::new(ptr as *mut Color, (buffer_width * buffer_height * 4) as usize)),
                 width: buffer_width,
                 height: buffer_height,
                 bytes_per_line: bytes_per_line,
@@ -1026,7 +1046,7 @@ impl RenderDestination {
     pub fn height(&self) -> u32 {self.height}
 
     pub fn get(&self, x: u32, y: u32) -> Color {
-        let index = (y * self.width + x) as uint;
+        let index = (y * self.width + x) as usize;
         match self.buffer {
             Foreign(ref buffer) => {
                 *buffer.get(index).unwrap()
@@ -1038,10 +1058,10 @@ impl RenderDestination {
     }
 
     pub fn set(&mut self, x: u32, y: u32, col: Color) {
-        let index = (y * self.width + x) as uint;
+        let index = (y * self.width + x) as usize;
         match self.buffer {
             Foreign(ref buffer) => {
-                fail!("Cannot set color for a Foreign (allocated by Voxlap) buffer");
+                panic!("Cannot set color for a Foreign (allocated by Voxlap) buffer");
             },
             Own(ref mut buffer) => {
                 (buffer.as_mut_slice())[index] = col;
@@ -1104,7 +1124,7 @@ impl<'a> RenderContext<'a> {
     pub fn draw_line_3d_without_z_buffer(&self, from: &vec3, to: &vec3, col: Color) {
         // Set alpha of col to non-zero to disable Z-buffering
         unsafe {
-            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, col.to_i32() | 0xFF000000);
+            c_api::drawline3d(from.x, from.y, from.z, to.x, to.y, to.z, (col.to_i32() as u32 | 0xFF000000) as i32);
         }
     }
 
@@ -1145,7 +1165,7 @@ impl<'a> RenderContext<'a> {
 
     pub fn print4x6(&self, x: u32, y: u32, fg_color: Color, bg_color: Color, text: &str) {
         assert!(self.render_dst.in_screen_y(y+5), "y = {}", y);
-        let c_str = text.to_c_str();
+        let c_str = CString::new(text).expect("CString::new failed");
         let ptr = c_str.as_ptr();
         unsafe {
             c_api::print4x6(x, y, fg_color.to_i32(), bg_color.to_i32(), ptr);
@@ -1154,7 +1174,7 @@ impl<'a> RenderContext<'a> {
 
     pub fn print6x8(&self, x: u32, y: u32, fg_color: Color, bg_color: Option<Color>, text: &str) {
         assert!(self.render_dst.in_screen_y(y+7), "y = {}", y);
-        let c_str = text.to_c_str();
+        let c_str = CString::new(text).expect("CString::new failed");
         let ptr = c_str.as_ptr();
         let bg_color = match bg_color {
             None => -1,
@@ -1170,9 +1190,9 @@ impl<'a> RenderContext<'a> {
         row: u32, column: u32, tile_per_row: u32) {
         unsafe {
             let offset_per_tile = tile_width * tile_height * 4;
-            let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as int;
+            let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as isize;
             c_api::drawtile(img.ptr.offset(offset) as *const u8, img.bytes_per_line, tile_width, tile_height,
-                -screen_x<<16, -screen_y<<16,
+                (0 - screen_x)<<16, (0 - screen_y)<<16,
                 0, 0,
                 zoom_x<<16, zoom_y<<16,
                 0, -1);
@@ -1181,7 +1201,7 @@ impl<'a> RenderContext<'a> {
 
     pub fn save_to_file(&self, filename: &str) {
         unsafe {
-            let c_str = filename.to_c_str();
+            let c_str = CString::new(filename).expect("CString::new failed");
             let filename_ptr = c_str.as_ptr();
             c_api::screencapture32bit(filename_ptr);
         }
@@ -1189,7 +1209,7 @@ impl<'a> RenderContext<'a> {
 
     pub fn save_panorama_to_file(&self, pos: &vec3, filename: &str, box_size: u32) {
         unsafe {
-            let c_str = filename.to_c_str();
+            let c_str = CString::new(filename).expect("CString::new failed");
             let filename_ptr = c_str.as_ptr();
             c_api::surroundcapture32bit(&pos.to_dpoint3d(), filename_ptr, box_size);
         }
