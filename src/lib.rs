@@ -26,7 +26,7 @@ use std::mem;
 use libc::{c_float, c_void};
 use std::ptr;
 
-mod c_api;
+pub mod c_api;
 
 
 pub enum CsgOperationType {
@@ -37,13 +37,13 @@ pub enum CsgOperationType {
 impl CsgOperationType {
     fn as_int(self) -> i32 {
         match self {
-            Insert => 0,
-            Remove => -1,
+            CsgOperationType::Insert => 0,
+            CsgOperationType::Remove => -1,
         }
     }
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum LightingMode {
     NoSpecialLighting,
     SimpleEstimatedNormalLighting,
@@ -269,21 +269,15 @@ impl Sprite {
     }
 
     pub fn set_pos(&mut self, pos: &vec3) {
-        unsafe {
-            self.ptr.pos = *pos.as_point3d();
-        }
+        self.ptr.pos = *pos.as_point3d();
     }
 
     pub fn get_pos(&self) -> vec3 {
-        unsafe {
-            vec3::from_point3d(self.ptr.pos)
-        }
+        vec3::from_point3d(self.ptr.pos)
     }
 
     pub fn add_pos(&mut self, dir: &vec3) {
-        unsafe {
-            self.ptr.pos = *(vec3::from_point3d(self.ptr.pos) + *dir).as_point3d();
-        }
+        self.ptr.pos = *(vec3::from_point3d(self.ptr.pos) + *dir).as_point3d();
     }
 
     pub fn rotate(&mut self, around_angle: &vec3, w: f32) {
@@ -561,8 +555,8 @@ impl Voxlap {
         }
     }
 
-    pub fn with_hitscan<F>(&mut self, pos: &vec3, dir: &vec3, func: F) -> bool  
-        where F : Fn(&mut Voxlap, &mut HitScanResult) {
+    pub fn with_hitscan<F>(&mut self, pos: &vec3, dir: &vec3, mut func: F) -> bool  
+        where F : FnMut(&mut Voxlap, &mut HitScanResult) {
         let mut voxel_pos = ivec3::new(0, 0, 0);
         let mut face: i32 = 0;
         unsafe {
@@ -813,9 +807,9 @@ impl Voxlap {
 
     pub fn set_lighting_mode(&mut self, mode: LightingMode) {
         let m = match mode {
-            NoSpecialLighting => 0,
-            SimpleEstimatedNormalLighting => 1,
-            MultiplePointSourceLighting => 2,
+            LightingMode::NoSpecialLighting => 0,
+            LightingMode::SimpleEstimatedNormalLighting => 1,
+            LightingMode::MultiplePointSourceLighting => 2,
         };
         unsafe {
             c_api::setLightingMode(m);
@@ -1008,16 +1002,16 @@ impl RenderDestination {
     }
 
     fn in_screen_x(&self, num: u32) -> bool {
-        num >= 0 && num < self.width && num < self.height
+        num < self.width && num < self.height
     }
 
     fn in_screen_y(&self, num: u32) -> bool {
-        num >= 0 && num < self.height
+        num < self.height
     }
 
     pub fn new(buffer_width: u32, buffer_height: u32) -> RenderDestination {
         let mut buff = Vec::<Color>::with_capacity((buffer_width * buffer_height) as usize);
-        for i in 0 .. buffer_width * buffer_height {
+        for _ in 0 .. buffer_width * buffer_height {
             buff.push(Color::rgb(0, 0, 0));
         }
         let dst = RenderDestination {
@@ -1030,9 +1024,9 @@ impl RenderDestination {
         return dst;
     }
 
-    pub fn from_cvec<T>(buff: CVec<T>, buffer_width: u32, buffer_height: u32, bytes_per_line: u32) -> RenderDestination {
+    pub fn from_bytes(buff: &mut [u8], buffer_width: u32, buffer_height: u32, bytes_per_line: u32) -> RenderDestination {
         unsafe {
-            let ptr = buff.into_inner() as *mut u8;
+            let ptr = buff.as_ptr() as *mut u8;
             RenderDestination {
                 buffer: Foreign(CVec::new(ptr as *mut Color, (buffer_width * buffer_height * 4) as usize)),
                 width: buffer_width,
@@ -1060,7 +1054,7 @@ impl RenderDestination {
     pub fn set(&mut self, x: u32, y: u32, col: Color) {
         let index = (y * self.width + x) as usize;
         match self.buffer {
-            Foreign(ref buffer) => {
+            Foreign(_) => {
                 panic!("Cannot set color for a Foreign (allocated by Voxlap) buffer");
             },
             Own(ref mut buffer) => {
@@ -1192,7 +1186,7 @@ impl<'a> RenderContext<'a> {
             let offset_per_tile = tile_width * tile_height * 4;
             let offset = (row*(tile_per_row*offset_per_tile) + (column*offset_per_tile)) as isize;
             c_api::drawtile(img.ptr.offset(offset) as *const u8, img.bytes_per_line, tile_width, tile_height,
-                (0 - screen_x)<<16, (0 - screen_y)<<16,
+                (!screen_x)<<16, (!screen_y)<<16,
                 0, 0,
                 zoom_x<<16, zoom_y<<16,
                 0, -1);
